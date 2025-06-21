@@ -43,7 +43,7 @@ class SignUpView(CreateAPIView):
 
                 # Insert user
                 cursor.execute(
-                    "INSERT INTO users (user_id, username, email, password, profile_image) VALUES (users_seq.NEXTVAL,:name,:title,:pass,SYSDATE,:path)",
+                    "INSERT INTO users VALUES (users_seq.NEXTVAL,:name,:title,:pass,SYSDATE,:path)",
                     {
                         'name' : user_name,
                         'title' : user_title,
