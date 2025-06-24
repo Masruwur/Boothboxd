@@ -1,21 +1,19 @@
 from django.core.files.storage import default_storage
 from django.contrib.auth.hashers import make_password,check_password
-from rest_framework.generics import CreateAPIView,GenericAPIView
+from rest_framework.generics import CreateAPIView,GenericAPIView,ListAPIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
-from .serializers import SignUpSerializer,LoginSerializer
+from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from .queries import getAlbumArtists
 
 class SignUpView(CreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
     serializer_class = SignUpSerializer 
 
     def perform_create(self,serializer):
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
         data = serializer.validated_data
         user_name = data['user_name']
         user_title = data['user_title']
@@ -28,7 +26,7 @@ class SignUpView(CreateAPIView):
         # Save image to disk if provided
         image_path = None
         if image:
-            image_name = f"profile_pics/{user_name}_{image.name}"
+            image_name = f"/media/{user_name}_{image.name}"
             path = default_storage.save(image_name, image)
             image_path = default_storage.url(path)
 
@@ -37,34 +35,32 @@ class SignUpView(CreateAPIView):
         try:
                 connection,cursor = connect()
                 # Check for existing user
-                cursor.execute("SELECT COUNT(*) FROM users WHERE user_title = :user", {'user':user_title})
+                cursor.execute("SELECT COUNT(*) FROM users WHERE user_title = :title", {'title':user_title})
                 if cursor.fetchone()[0] > 0:
                     return Response({'error': 'User title already exists'}, status=409)
 
                 # Insert user
-                cursor.execute(
-                    "INSERT INTO users VALUES (users_seq.NEXTVAL,:name,:title,:pass,SYSDATE,:path)",
+                query = """ INSERT INTO users (user_id, user_name, user_title, password, created_at, user_image)
+                            VALUES (user_seq.NEXTVAL,:user_name,:user_title,:user_pass,SYSDATE,:image_path)"""
+                cursor.execute(query,
                     {
-                        'name' : user_name,
-                        'title' : user_title,
-                        'pass' : hashed_password,
-                        'path' : image_path 
+                        'user_name' : user_name,
+                        'user_title' : user_title,
+                        'user_pass' : hashed_password,
+                        'image_path' : image_path 
                     }
                 )
 
                 connection.commit()
                 disconnect(cursor,connection)
         except Exception as e:
+            print(e)
             return Response({'error': str(e)}, status=500)
+        
 
         
         return Response( {"message": "User created successfully."},status=status.HTTP_201_CREATED)
     
-
-
-
-
-
 
 
 
@@ -94,7 +90,7 @@ class LoginView(GenericAPIView):
                 return Response({'error': 'Incorrect password'}, status=status.HTTP_401_UNAUTHORIZED)
 
             # Create JWT token manually
-            refresh = RefreshToken.for_user(None)  # You don’t have a Django user object, so we’ll customize payload
+            refresh = RefreshToken()  # You don’t have a Django user object, so we’ll customize payload
             refresh['user_id'] = user_id
             refresh['user_title'] = user_title
 
@@ -105,6 +101,228 @@ class LoginView(GenericAPIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        
     
+#search params for albums : name,artist,genre,year
+    
+class AlbumObtainView(ListAPIView):
+    serializer_class = AlbumSerializer
 
+
+    def get_queryset(self):
+
+        
+        try:
+            connection, cursor = connect()
+            query = "SELECT * FROM ALBUMS"
+            cursor.execute(query)
+            album_list = cursor.fetchall()
+
+            albums_data = []
+            for album in album_list:
+                album_name = album[1]
+                album_artist = ""
+                res = getAlbumArtists(cursor,album_name)
+                if res : album_artist = res[0][0]
+
+                albums_data.append({
+                    'album_name' : album_name,
+                    'album_artist' : album_artist,
+                    'album_image' : album[2],
+                    'year' : str(album[3].year)
+                })
+
+            disconnect(cursor,connection)
+            return albums_data
+        except Exception as e:
+            disconnect(cursor,connection)
+            return []
+        
+class UniqueAlbumObtainView(ListAPIView):
+    serializer_class = AlbumSerializer
+
+    def get_queryset(self):
+        album_name = self.kwargs.get('album_name').replace("%20"," ")
+        try:
+            connection, cursor = connect()
+            query = "SELECT * FROM ALBUMS where album_name = :album_name"
+            cursor.execute(query,{'album_name':album_name})
+            album = cursor.fetchone()
+
+            album_artists = getAlbumArtists(cursor,album_name)
+            artist_list = ", ".join([t[0] for t in album_artists])
+
+            album_data = {
+                'album_name' : album_name,
+                'album_artist' : artist_list,
+                'album_image' : album[2],
+                'year' : str(album[3].year)
+            }
+
+            disconnect(cursor,connection)
+            return [album_data]
+        except Exception as e:
+            print(e)
+            return []
+        
+class AlbumSongObtainView(ListAPIView):
+    serializer_class = SongSerializer
+
+    def get_queryset(self):
+        album_name = self.kwargs.get('album_name').replace("%20"," ")
+        try:
+            connection, cursor = connect()
+            query = """
+                        SELECT S.song_name,A.album_name,A.album_image,A.release_year,
+                        LISTAGG(AR.artist_name, ', ') WITHIN GROUP (ORDER BY AR.artist_name) AS artists
+                        FROM songs S
+                        JOIN albums A ON S.album_id = A.album_id
+                        JOIN song_artist SA ON SA.song_id = S.song_id
+                        JOIN artists AR ON SA.artist_id = AR.artist_id
+                        WHERE A.album_name = :input
+                        GROUP BY S.song_name,A.album_name,A.album_image,A.release_year
+                    """
+            cursor.execute(query,{'input':album_name})
+            songs = cursor.fetchall()
+            if songs is None:
+                return []
+
+            song_data = []
+            for song in songs:
+                song_data.append({
+                    'song_name' : song[0],
+                    'album_name' : song[1],
+                    'album_image' : song[2],
+                    'release_year' : str(song[3].year),
+                    'song_artists' : song[4]
+                })
+
+            disconnect(cursor,connection)
+            return song_data
+        except Exception as e:
+            print(e)
+            return []
+
+class ArtistSongView(ListAPIView):
+    serializer_class = SongSerializer
+
+    def get_queryset(self):
+        try:
+                artist_name = self.kwargs.get('artist_name').replace("%20"," ")
+
+                connection,cursor = connect()
+                query = """
+                        SELECT S.song_name,AL.album_name,AL.album_image,AL.release_year,
+                        listagg(A.artist_name,',') WITHIN GROUP (ORDER BY A.artist_name) AS artists
+                        FROM songs S
+                        JOIN albums AL ON (AL.album_id = S.album_id)
+                        JOIN song_artist SA ON (SA.song_id = S.song_id)
+                        JOIN artists A ON(SA.artist_id = A.artist_id)
+                        GROUP BY song_name,AL.album_name,AL.album_image,AL.release_year
+                        HAVING (listagg(A.artist_name,',') WITHIN GROUP (ORDER BY A.artist_name)) LIKE '%'||:artist_name||'%'
+                        """
+                cursor.execute(query,{'artist_name' : artist_name})
+
+                res = cursor.fetchall()
+                disconnect(cursor,connection)
+                if res is None : return []
+
+                song_data = [
+                    {
+                        'song_name' : song[0],
+                        'album_name' : song[1],
+                        'album_image' : song[2],
+                        'release_year' : str(song[3].year),
+                        'song_artists' : song[4]
+                    }
+                    for song in res
+                ]
+                return song_data
+        except Exception as e:
+            print(e)
+            return []
+        
+
+class ArtistAlbumView(ListAPIView):
+    serializer_class = AlbumSerializer
+
+    def get_queryset(self):
+        try:
+            artist_name = self.kwargs.get('artist_name').replace("%20"," ")
+
+            connection,cursor = connect()
+
+            query = """
+                    SELECT A.album_name,A.album_image,A.release_year FROM albums A
+                    WHERE A.album_id IN
+                    (SELECT DISTINCT S.album_id FROM songs S
+                    JOIN song_artist SA ON (SA.song_id = S.song_id)
+                    WHERE SA.artist_id = (SELECT artist_id FROM artists WHERE artist_name = :artist_name))              
+                    """
+            
+            cursor.execute(query,{'artist_name':artist_name})
+
+            res = cursor.fetchall()
+            if res is None:
+                disconnect(cursor,connection) 
+                return []
+
+            albums_data = []
+            for album in res:
+                album_name = album[0]
+                album_artist = ""
+                res = getAlbumArtists(cursor,album_name)
+                if res : album_artist = res[0][0]
+
+                albums_data.append({
+                    'album_name' : album_name,
+                    'album_artist' : album_artist,
+                    'album_image' : album[1],
+                    'year' : str(album[2].year)
+                })
+
+            disconnect(cursor,connection)
+            return albums_data
+        except Exception as e:
+            print(e)
+            return []
+
+
+        
+class UniqueArtistObtainView(ListAPIView):
+    serializer_class = ArtistSerializer
+
+    def get_queryset(self):
+        try:
+            artist_name = self.kwargs.get('artist_name').replace("%20"," ")
+
+            connection,cursor = connect()
+
+            query = "SELECT artist_image from artists where artist_name = :artist_name"
+                
+            cursor.execute(query,{'artist_name':artist_name})
+            image = cursor.fetchone()[0]
+
+            disconnect(cursor,connection)
+
+            return [
+                {
+                    'artist_name' : artist_name,
+                    'artist_image' : image
+                }
+            ]
+        except Exception as e:
+            print(e)
+            return []
+        
+
+#search params for songs : name,artist,album,genre,year
+#search params for albums : name,artist,genre,year
+#search params for artist : name
+### will add social params during 2nd half
+
+            
+
+
+                  
+        
