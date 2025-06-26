@@ -5,9 +5,10 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
-from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer
+from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .queries import getAlbumArtists
+from rest_framework.permissions import AllowAny
 
 class SignUpView(CreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -26,7 +27,7 @@ class SignUpView(CreateAPIView):
         # Save image to disk if provided
         image_path = None
         if image:
-            image_name = f"/media/{user_name}_{image.name}"
+            image_name = f"{user_name}_{image.name}"
             path = default_storage.save(image_name, image)
             image_path = default_storage.url(path)
 
@@ -75,16 +76,17 @@ class LoginView(GenericAPIView):
         user_title = serializer.validated_data['user_title']
         password = serializer.validated_data['password']
 
+
         try:
             connection, cursor = connect()
-            cursor.execute("SELECT user_id, password FROM users WHERE user_title = :title", {'title': user_title})
+            cursor.execute("SELECT user_id, password,user_image FROM users WHERE user_title = :title", {'title': user_title})
             row = cursor.fetchone()
             disconnect(cursor, connection)
 
             if not row:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            user_id, hashed_password = row
+            user_id, hashed_password , user_image = row
 
             if not check_password(password, hashed_password):
                 return Response({'error': 'Incorrect password'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -93,6 +95,7 @@ class LoginView(GenericAPIView):
             refresh = RefreshToken()  # You don’t have a Django user object, so we’ll customize payload
             refresh['user_id'] = user_id
             refresh['user_title'] = user_title
+            refresh['user_image'] = user_image
 
             return Response({
                 'access': str(refresh.access_token),
@@ -103,40 +106,7 @@ class LoginView(GenericAPIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
     
-#search params for albums : name,artist,genre,year
-    
-class AlbumObtainView(ListAPIView):
-    serializer_class = AlbumSerializer
 
-
-    def get_queryset(self):
-
-        
-        try:
-            connection, cursor = connect()
-            query = "SELECT * FROM ALBUMS"
-            cursor.execute(query)
-            album_list = cursor.fetchall()
-
-            albums_data = []
-            for album in album_list:
-                album_name = album[1]
-                album_artist = ""
-                res = getAlbumArtists(cursor,album_name)
-                if res : album_artist = res[0][0]
-
-                albums_data.append({
-                    'album_name' : album_name,
-                    'album_artist' : album_artist,
-                    'album_image' : album[2],
-                    'year' : str(album[3].year)
-                })
-
-            disconnect(cursor,connection)
-            return albums_data
-        except Exception as e:
-            disconnect(cursor,connection)
-            return []
         
 class UniqueAlbumObtainView(ListAPIView):
     serializer_class = AlbumSerializer
@@ -319,7 +289,119 @@ class UniqueArtistObtainView(ListAPIView):
 #search params for songs : name,artist,album,genre,year
 #search params for albums : name,artist,genre,year
 #search params for artist : name
-### will add social params during 2nd half
+# will add social params during 2nd half
+
+class AlbumFilter(ListAPIView):
+    serializer_class = AlbumSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        album_name = self.request.query_params.get('album_name',' ').replace('%20',' ')
+        artist_name = self.request.query_params.get('artist_name',' ').replace('%20',' ')
+        genre_name = self.request.query_params.get('genre_name',' ').replace('%20',' ')
+        year = self.request.query_params.get('year',' ').replace('%20',' ')
+
+        
+        query = """
+                    SELECT distinct A.album_name, A.album_image, A.release_year
+                    FROM albums A 
+                    LEFT JOIN songs S ON (S.album_id = A.album_id)
+                    LEFT JOIN song_artist SA ON (SA.song_id = S.song_id)
+                    LEFT JOIN artists AR ON (AR.artist_id = SA.artist_id)
+                    LEFT JOIN song_genre SG ON (SG.song_id = S.song_id)
+                    LEFT JOIN genres G ON (G.genre_id = SG.genre_id)
+                    WHERE (:album_name = ' ' OR UPPER(A.album_name) LIKE '%' || UPPER(:album_name) || '%')
+                    AND (:artist_name = ' ' OR UPPER(AR.artist_name) LIKE '%' || UPPER(:artist_name) || '%')
+                    AND (:genre_name = ' ' OR UPPER(G.genre_name) LIKE '%' || UPPER(:genre_name) || '%')
+                    AND (:year = ' ' OR (A.release_year BETWEEN ADD_MONTHS(TO_DATE(:year,'YYYY'),-24) 
+                    AND ADD_MONTHS(TO_DATE(:year,'YYYY'),24)))
+                """
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{
+                'album_name' : album_name,
+                'artist_name' : artist_name,
+                'genre_name' : genre_name,
+                'year' : year
+            })
+
+            album_list = cursor.fetchall()
+
+            albums_data = []
+            for album in album_list:
+                    album_name = album[0]
+                    album_artist = ""
+                    res = getAlbumArtists(cursor,album_name)
+                    if res : album_artist = res[0][0]
+
+                    albums_data.append({
+                        'album_name' : album_name,
+                        'album_artist' : album_artist,
+                        'album_image' : album[1],
+                        'year' : str(album[2].year)
+                    })
+
+            disconnect(cursor,connection)
+            return albums_data
+        except Exception as e:
+            print(e)
+            disconnect(cursor,connection)
+            return []
+
+class UserObtain(ListAPIView):
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('id')
+        try:
+            query = "select * from users where user_id = :user_id"
+
+            connection,cursor = connect()
+            cursor.execute(query,{'user_id':user_id})
+            res = cursor.fetchone()
+            disconnect(cursor,connection)
+
+            return [
+                { 'user_name' : res[1],
+                  'user_title' : res[2],
+                  'user_image' : res[5]
+                }
+            ]
+        except Exception as e:
+            print(e)
+            return []
+        
+class AlbumGenreObtain(ListAPIView):
+    serializer_class = GenreSerializer
+
+    def get_queryset(self):
+        album_name = self.kwargs.get('album_name')
+
+        query="""
+                SELECT DISTINCT G.genre_name FROM albums A
+                JOIN songs S ON (S.album_id = A.album_id)
+                JOIN song_genre SG ON (S.song_id = SG.song_id)
+                JOIN genres G ON (G.genre_id = SG.genre_id)
+                WHERE UPPER(A.album_name) = UPPER(:album_name)
+                ORDER BY G.genre_name
+              """
+        
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{'album_name':album_name})
+            res = cursor.fetchall()
+            if res is None:
+                return []
+            
+            return [
+                {'genre_name':genre[0]}
+                for genre in res
+            ]
+        except Exception as e:
+            print(e)
+            return []
+    
+
 
             
 

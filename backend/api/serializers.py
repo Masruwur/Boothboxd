@@ -11,6 +11,11 @@ class LoginSerializer(serializers.Serializer):
     user_title = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
+class UserSerializer(serializers.Serializer):
+    user_name = serializers.CharField()
+    user_title = serializers.CharField()
+    user_image = serializers.CharField()
+
 class AlbumSerializer(serializers.Serializer):
     album_name = serializers.CharField(max_length=255)
     album_artist = serializers.CharField(max_length=255)
@@ -27,4 +32,7 @@ class SongSerializer(serializers.Serializer):
 class ArtistSerializer(serializers.Serializer):
     artist_name = serializers.CharField(max_length=255)
     artist_image = serializers.CharField(max_length=1000)
+
+class GenreSerializer(serializers.Serializer):
+    genre_name = serializers.CharField()
 
