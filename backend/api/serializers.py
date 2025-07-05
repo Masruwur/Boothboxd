@@ -36,3 +36,16 @@ class ArtistSerializer(serializers.Serializer):
 class GenreSerializer(serializers.Serializer):
     genre_name = serializers.CharField()
 
+class PlaylistSerializer(serializers.Serializer):
+    playlist_name = serializers.CharField(max_length=255)
+    user_id = serializers.IntegerField()
+
+class PlaylistDataSerializer(serializers.Serializer):
+    playlist_name = serializers.CharField(max_length=255)
+    song_count = serializers.IntegerField()
+class PlayListSongSerializer(serializers.Serializer):
+    playlist_name = serializers.CharField(max_length=255)
+    song_name = serializers.CharField(max_length=255)
+    user_id = serializers.IntegerField()
+    
+

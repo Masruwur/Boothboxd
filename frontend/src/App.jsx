@@ -7,6 +7,7 @@ import Home from './pages/Home'
 import AlbumPage from './pages/Album'
 import { BrowserRouter,Route,Routes, Navigate } from "react-router-dom"
 import ProtectedRoute from './components/ProtectedRoute'
+import PlaylistPage from './pages/Playlist'
 
 function Logout(){
   localStorage.clear()
@@ -35,6 +36,10 @@ function App() {
         <Route path="/test/:albumName" element={
           <ProtectedRoute>
           <AlbumPage/>
+          </ProtectedRoute>} />
+         <Route path="/playlists/:playlist_name" element={
+          <ProtectedRoute>
+          <PlaylistPage/>
           </ProtectedRoute>} />
       </Routes>
     </BrowserRouter>

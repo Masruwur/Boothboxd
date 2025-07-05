@@ -17,6 +17,7 @@ import {
 export default function Home() {
   const [user,setUser] = useState({})
   const [albumList,setAlbumList] =useState([])
+  const [playLists,setPlaylists] = useState([])
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('albums');
@@ -67,6 +68,26 @@ useEffect(()=>{
     };
     fetchUser();
 },[])
+
+useEffect(()=>{
+    const fetchPlaylists = async ()=>{
+        try{
+             const token = localStorage.getItem(ACCESS_TOKEN)
+             const user_id = jwtDecode(token).user_id
+             const res = await api.get(`playlists/users/${user_id}/`)
+             setPlaylists(res.data)
+        }catch(e){
+            console.log(e)
+        }
+    };
+    fetchPlaylists();
+},[])
+
+  const handlePlaylistClick = (playlist_name) =>{
+     navigate(`/playlists/${playlist_name}`)
+  }
+
+
 
   const handleApply = async ()=>{
      try {
@@ -185,18 +206,18 @@ useEffect(()=>{
           <div className="space-y-6">
             <h2 className="text-3xl font-bold text-white">Playlists</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer">
+              {playLists.map((playlist,i) => (
+                <div key={i} className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer" onClick={()=>handlePlaylistClick(playlist.playlist_name)}>
                   <div className="flex items-center space-x-3 mb-3">
                     <div className="w-12 h-12 bg-gray-600 rounded-md flex items-center justify-center">
                       <List size={20} className="text-gray-400" />
                     </div>
                     <div>
-                      <h3 className="text-white font-medium">Playlist {i}</h3>
-                      <p className="text-gray-400 text-sm">{10 + i} tracks</p>
+                      <h3 className="text-white font-medium">{playlist.playlist_name}</h3>
+                      <p className="text-gray-400 text-sm">{playlist.song_count} tracks</p>
                     </div>
                   </div>
-                  <p className="text-gray-300 text-sm">A curated collection of amazing tracks...</p>
+                  <p className="text-gray-300 text-sm"></p>
                 </div>
               ))}
             </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Heart, Plus, ThumbsUp, Play, Clock, Calendar, Tag } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import api from '../api';
+import PlaylistPopup from '../components/PlaylistPopUp';
 
 const AlbumPage = () => {
   const [likedSongs, setLikedSongs] = useState(new Set());
@@ -11,6 +12,9 @@ const AlbumPage = () => {
   const [songData,setSongData] = useState([])
   const [artistData,setArtistData] = useState({})
   const [genreData,setGenreData] = useState([])
+  const [isPopUp,setIsPopUp] = useState(false)
+  const [currentSong,setCurrentSong] = useState({})
+
 
   const albumParam = useParams()
   useEffect(()=>{
@@ -79,6 +83,11 @@ const AlbumPage = () => {
       likes: 7
     }
   ];
+
+  const songAddClick = (song) => {
+     setCurrentSong(song)
+     setIsPopUp(true)
+  }
 
   const toggleSongLike = (songId) => {
     const newLikedSongs = new Set(likedSongs);
@@ -194,7 +203,7 @@ const AlbumPage = () => {
                       >
                         <Heart className={`w-4 h-4 ${likedSongs.has(song.id) ? 'fill-current' : ''}`} />
                       </button>
-                      <button className="p-2 rounded-full text-gray-400 hover:text-white transition-colors">
+                      <button className="p-2 rounded-full text-gray-400 hover:text-white transition-colors" onClick={() => songAddClick(song)}>
                         <Plus className="w-4 h-4" />
                       </button>
                     </div>
@@ -244,6 +253,11 @@ const AlbumPage = () => {
           </div>
         </div>
       </div>
+      <PlaylistPopup
+        isPopupOpen = {isPopUp}
+        onClose={()=>setIsPopUp(false)}
+        currentSong={currentSong}
+      />
     </div>
   );
 };

@@ -5,7 +5,8 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
-from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer
+from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer,PlaylistSerializer
+from .serializers import PlaylistDataSerializer,PlayListSongSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .queries import getAlbumArtists
 from rest_framework.permissions import AllowAny
@@ -400,7 +401,142 @@ class AlbumGenreObtain(ListAPIView):
         except Exception as e:
             print(e)
             return []
+        
+class CreatePlaylist(CreateAPIView):
+    serializer_class = PlaylistSerializer
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+        user_id = data['user_id']
+        playlist_name = data['playlist_name']
+
+        if not user_id or not playlist_name:
+            return Response({'error':'missing fields'},status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            connection,cursor = connect()
+            query = """
+                      INSERT INTO PLAYLISTS VALUES (PLAYLIST_SEQ.NEXTVAL,:playlist_name,:user_id,SYSDATE,'T')
+                    """
+            cursor.execute(query,{
+                'playlist_name':playlist_name,
+                'user_id':user_id
+            })
+ 
+            connection.commit()
+            disconnect(cursor,connection)
+            return Response({'message':f'Playlist {playlist_name} created'},status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print(e)
+            return Response({'error':'dbms error'},status=status.HTTP_400_BAD_REQUEST)
     
+
+class GetUserPlaylists(ListAPIView):
+    serializer_class = PlaylistDataSerializer
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('user_id')
+        query = """
+                  SELECT P.playlist_name,count(PS.SONG_ID) song_count
+                  FROM playlists P LEFT OUTER JOIN 
+                  playlist_song PS ON (P.PL_ID = PS.PL_ID)
+                  WHERE P.user_id = :user_id
+                  GROUP BY P.PLAYLIST_NAME
+                """
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{
+                'user_id':user_id
+            })
+
+            res = cursor.fetchall()
+
+            disconnect(cursor,connection)
+
+            return [{
+                    'playlist_name' : p[0],
+                    'song_count' : p[1]
+                    }
+                    for p in res
+            ]
+        except  Exception as e:
+            print(e)
+            return []
+        
+
+class AddPlaylistSong(CreateAPIView):
+    serializer_class = PlayListSongSerializer
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+        song_name = data['song_name']
+        playlist_name = data['playlist_name']
+        user_id = data['user_id']
+        
+        query="""
+                INSERT INTO PLAYLIST_SONG VALUES ((SELECT PL_ID FROM PLAYLISTS WHERE PLAYLIST_NAME = :playlist_name
+                AND USER_ID = :user_id),
+                (SELECT SONG_ID FROM SONGS WHERE SONG_NAME = :song_name))
+              """
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{
+                'playlist_name' : playlist_name,
+                'song_name' : song_name,
+                'user_id' :user_id
+            })
+
+            connection.commit()
+            disconnect(cursor,connection)
+            return Response({'message':'song added to playlist'},status=status.HTTP_200_OK)
+        except Exception as e:
+            print(e)
+            return Response({'error':f'{e}'},status=status.HTTP_400_BAD_REQUEST)
+
+class ObtainPlaylistsongs(ListAPIView):
+    serializer_class = SongSerializer
+
+    def get_queryset(self):
+        playlist_name = self.kwargs.get('playlist_name')
+        user_id = self.kwargs.get('user_id')
+
+        query = """
+                    SELECT S.song_name,A.album_name,A.album_image,A.release_year,
+                    LISTAGG(AR.artist_name, ', ') WITHIN GROUP (ORDER BY AR.artist_name) AS artists
+                    FROM SONGS S
+                    JOIN ALBUMS A ON (A.ALBUM_ID = S.ALBUM_ID)
+                    JOIN SONG_ARTIST SA ON (SA.SONG_ID = S.SONG_ID)
+                    JOIN ARTISTS AR ON(AR.ARTIST_ID=SA.ARTIST_ID)
+                    JOIN PLAYLIST_SONG PS ON (PS.SONG_ID = S.SONG_ID)
+                    JOIN PLAYLISTS P ON (P.PL_ID = PS.PL_ID )
+                    WHERE P.USER_ID = :user_id AND P.PLAYLIST_NAME = :playlist_name
+                    GROUP BY S.song_name,A.album_name,A.album_image,A.release_year
+                """
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{
+                'user_id' :user_id,
+                'playlist_name' : playlist_name
+            })
+
+            res = cursor.fetchall()
+
+            songs = [
+                {
+                     'song_name' : song[0],
+                     'album_name' : song[1],
+                     'album_image' : song[2],
+                     'release_year' : str(song[3].year),
+                     'song_artists' : song[4]
+                }
+                for song in res
+            ]
+
+            return songs
+        except Exception as e:
+            print(e)
+            return []
+        
 
 
             

@@ -1,63 +1,116 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Plus, Music, Check } from 'lucide-react';
+import { ACCESS_TOKEN } from '../constants';
+import { jwtDecode } from 'jwt-decode';
+import api from '../api';
 
-const PlaylistPopup = () => {
-  const [isPopupOpen, setIsPopupOpen] = useState(false);
+const PlaylistPopup = ({isPopupOpen,onClose,currentSong}) => {
   const [selectedPlaylists, setSelectedPlaylists] = useState(new Set());
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [userId,setUserId] = useState('');
 
-  // Mock data for existing playlists
-  const [playlists, setPlaylists] = useState([
-    { id: 1, name: 'My Favorites', songCount: 12 },
-    { id: 2, name: 'Workout Hits', songCount: 25 },
-    { id: 3, name: 'Chill Vibes', songCount: 18 },
-    { id: 4, name: 'Road Trip', songCount: 30 },
-  ]);
+  // data for existing playlists
+  const [playlists, setPlaylists] = useState([]);
 
-  
+  useEffect(() => {
+  try {
+    const token = localStorage.getItem(ACCESS_TOKEN);
+    const user_id = jwtDecode(token).user_id;
+    setUserId(user_id);
+  } catch (e) {
+    console.log(e);
+  }
+}, []);
 
-  const togglePlaylistSelection = (playlistId) => {
-    const newSelected = new Set(selectedPlaylists);
-    if (newSelected.has(playlistId)) {
-      newSelected.delete(playlistId);
-    } else {
-      newSelected.add(playlistId);
-    }
-    setSelectedPlaylists(newSelected);
-  };
-
-  const handleCreateNewPlaylist = () => {
-    if (newPlaylistName.trim()) {
-      const newPlaylist = {
-        id: playlists.length + 1,
-        name: newPlaylistName.trim(),
-        songCount: 0
-      };
-      setPlaylists([...playlists, newPlaylist]);
-      setSelectedPlaylists(new Set([...selectedPlaylists, newPlaylist.id]));
-      setNewPlaylistName('');
-      setIsCreatingNew(false);
+useEffect(() => {
+  const fetchPlaylists = async () => {
+    if (!userId) return; // wait until userId is set
+    try {
+      const res = await api.get(`playlists/users/${userId}/`);
+      setPlaylists(res.data);
+    } catch (e) {
+      console.log(e);
     }
   };
 
-  const handleAddSong = () => {
-    // This would typically make API calls to add the song to selected playlists
-    console.log('Adding song to playlists:', Array.from(selectedPlaylists));
-    
-    // Update song counts for selected playlists
-    setPlaylists(playlists.map(playlist => 
-      selectedPlaylists.has(playlist.id) 
-        ? { ...playlist, songCount: playlist.songCount + 1 }
-        : playlist
-    ));
-    
-    // Reset and close popup
+  fetchPlaylists();
+}, [userId]);
+
+  const isPlaylistSelected = (playlist) => {
+  for (let p of selectedPlaylists) {
+    if (p === playlist.playlist_name) {
+      return true;
+    }
+  }
+  return false;
+ };
+
+
+  const togglePlaylistSelection = (playlist) => {
+  const updatedSet = new Set(selectedPlaylists);
+
+  if (isPlaylistSelected(playlist)) {
+    for (let p of selectedPlaylists) {
+      if (p.playlist_name === playlist.playlist_name) {
+        updatedSet.delete(p.playlist_name);
+        break;
+      }
+    }
+  } else {
+    updatedSet.add(playlist.playlist_name);
+  }
+
+  setSelectedPlaylists(updatedSet);
+};
+
+
+  const handleCreateNewPlaylist = async () => {
+  const name = newPlaylistName.trim();
+  if (!name || !userId) return;
+
+  try {
+    await api.post('playlists/create/', {
+      playlist_name: name,
+      user_id: userId
+    });
+
+    // Clear inputs and close create form
+    setNewPlaylistName('');
+    setIsCreatingNew(false);
+
+    // Refresh the playlists from the backend
+    const res = await api.get(`playlists/users/${userId}/`);
+    setPlaylists(res.data);
+  } catch (error) {
+    console.error('Failed to create playlist:', error);
+  }
+};
+
+
+  const handleAddSong = async () => {
+  try {
+    for(let playlist of selectedPlaylists){
+       await api.post('/playlists/add/',{
+         'playlist_name' : playlist,
+         'song_name' : currentSong.song_name,
+         'user_id' :userId
+       })
+    }
+
+    const res = await api.get(`playlists/users/${userId}/`);
+    setPlaylists(res.data);
+
+    // Reset and close
     setSelectedPlaylists(new Set());
-    setIsPopupOpen(false);
     setIsCreatingNew(false);
     setNewPlaylistName('');
-  };
+    onClose();
+  } catch (error) {
+    console.error('Failed to add song to playlists:', error);
+  }
+};
+
 
   
 
@@ -67,18 +120,18 @@ const PlaylistPopup = () => {
       {/* Popup Overlay */}
       {isPopupOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-xl max-w-md w-full max-h-[80vh] overflow-hidden border border-gray-700 shadow-2xl">
+          <div className="bg-gray-800 rounded-xl max-w-md w-full max-h-[90vh] flex flex-col border border-gray-700 shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-700">
               <div>
                 <h2 className="text-white font-semibold text-lg">Add to Playlist</h2>
                 <p className="text-gray-400 text-sm mt-1">
-                  {currentSong.title} • {currentSong.artist}
+                  {currentSong.song_name} • {currentSong.song_artists}
                 </p>
               </div>
               <button
                 onClick={() => {
-                  setIsPopupOpen(false);
+                  onClose();
                   setIsCreatingNew(false);
                   setNewPlaylistName('');
                   setSelectedPlaylists(new Set());
@@ -139,19 +192,19 @@ const PlaylistPopup = () => {
                 <h3 className="text-gray-300 font-medium mb-3">Your Playlists</h3>
                 {playlists.map((playlist) => (
                   <div
-                    key={playlist.id}
-                    onClick={() => togglePlaylistSelection(playlist.id)}
+                    key={playlist.playlist_name}
+                    onClick={() => togglePlaylistSelection(playlist)}
                     className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                      selectedPlaylists.has(playlist.id)
+                      isPlaylistSelected(playlist)
                         ? 'bg-green-600 bg-opacity-20 border border-green-500'
                         : 'bg-gray-700 hover:bg-gray-600 border border-transparent'
                     }`}
                   >
                     <div>
-                      <p className="text-white font-medium">{playlist.name}</p>
-                      <p className="text-gray-400 text-sm">{playlist.songCount} songs</p>
+                      <p className="text-white font-medium">{playlist.playlist_name}</p>
+                      <p className="text-gray-400 text-sm">{playlist.song_count} songs</p>
                     </div>
-                    {selectedPlaylists.has(playlist.id) && (
+                    {isPlaylistSelected(playlist) && (
                       <Check className="w-5 h-5 text-green-400" />
                     )}
                   </div>
