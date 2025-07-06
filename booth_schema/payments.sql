@@ -3,7 +3,7 @@ CREATE TABLE card_info (
   user_id NUMBER,
   method_type VARCHAR2(255),
   last4 CHAR(4),
-  expiry DATE
+  expiry CHAR(5)
 );
 
 CREATE TABLE transactions (

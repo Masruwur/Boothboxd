@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { ACCESS_TOKEN } from '../constants';
 import { jwtDecode } from 'jwt-decode';
+import PurchaseConfirmationPopup from '../components/purchasePopUp';
 import { 
   Album, 
   FileText, 
@@ -11,7 +12,8 @@ import {
   LogOut, 
   Menu, 
   X,
-  User
+  User,
+  CreditCard 
 } from 'lucide-react';
 
 export default function Home() {
@@ -21,6 +23,7 @@ export default function Home() {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('albums');
+  const [popup,setPopup] = useState(false)
   const [filters, setFilters] = useState({
     albumName: '',
     artistName: '',
@@ -28,15 +31,25 @@ export default function Home() {
     rating: '',
     year: ''
   });
+  const [cards, setCards] = useState([]);
+  const [cardForm, setCardForm] = useState({
+    method: '',
+    last4: '',
+    expiry: ''
+  });
+  const [prices,setPrices] = useState([])
+  const [selectedCardIndex, setSelectedCardIndex] = useState(0);
+  const [popData,setpopData] = useState(null)
+
 
   const navigationItems = [
     { name: 'Albums', key: 'albums', icon: Album },
     { name: 'Posts', key: 'posts', icon: FileText },
     { name: 'Playlists', key: 'playlists', icon: List },
     { name: 'Marketplace', key: 'marketplace', icon: ShoppingBag },
+    { name: 'Cards', key: 'cards', icon: CreditCard }, 
   ];
 
-  
 
 useEffect(() => {
     const fetchAlbums = async () => {
@@ -83,8 +96,48 @@ useEffect(()=>{
     fetchPlaylists();
 },[])
 
+useEffect(() => {
+    const fetchPrices = async () => {
+        try {
+        const path = 'prices/'
+        const res = await api.get(path)
+        setPrices(res.data);
+        } catch (err) {
+        console.error("Failed to fetch prices:", err);
+        }
+    };
+
+   fetchPrices();
+}, []);
+
+
+useEffect(()=>{
+    const fetchCards = async ()=>{
+        try{
+             const token = localStorage.getItem(ACCESS_TOKEN)
+             const user_id = jwtDecode(token).user_id
+             const res = await api.get(`cards/${user_id}/`)  // Adjust API endpoint as needed
+             setCards(res.data)
+        }catch(e){
+            console.log(e)
+        }
+    };
+    fetchCards();
+},[activeSection])
+
+
   const handlePlaylistClick = (playlist_name) =>{
      navigate(`/playlists/${playlist_name}`)
+  }
+
+  const handlePriceClick = (price,method) =>{
+    const data = {
+      ...price,
+      ...cards[selectedCardIndex],
+      ops : method
+    }
+    setpopData(data)
+    setPopup(true)      
   }
 
 
@@ -111,6 +164,35 @@ useEffect(()=>{
   const HandleClick = (albumName)=>{
      navigate(`/test/${albumName}`) 
   }
+
+  const handleCardSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem(ACCESS_TOKEN);
+      const user_id = jwtDecode(token).user_id;
+      
+      const cardData = {
+        ...cardForm,
+        user_id: user_id
+      };
+      
+      const res = await api.post('cards/create/', cardData);  // Adjust API endpoint as needed
+      
+      // Reset form
+      setCardForm({
+        method: '',
+        last4: '',
+        expiry: ''
+      });
+      
+      // Refresh cards list
+      const cardsRes = await api.get(`cards/${user_id}/`);
+      setCards(cardsRes.data);
+      
+    } catch (error) {
+      console.error('Failed to register card:', error);
+    }
+  };
 
 
   const renderContent = () => {
@@ -223,31 +305,144 @@ useEffect(()=>{
             </div>
           </div>
         );
-      case 'marketplace':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-white">Marketplace</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition-colors cursor-pointer">
-                  <div className="aspect-video bg-gray-600 flex items-center justify-center">
-                    <ShoppingBag size={32} className="text-gray-400" />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="text-white font-medium mb-1">Item {i}</h3>
-                    <p className="text-gray-400 text-sm mb-2">Premium music equipment and accessories</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-green-400 font-semibold">${99 + i * 10}</span>
-                      <button className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors">
-                        View
-                      </button>
+     case 'marketplace':
+          return (
+            <div className="space-y-6">
+              <h2 className="text-3xl font-bold text-white">Marketplace</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {prices.map((price,i) => (
+                  <div key={i} className="bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition-colors cursor-pointer">
+                    <div className="aspect-video bg-gray-600 flex items-center justify-center">
+                     <img
+                        src={price.album_image}
+                        className="w-full h-full object-cover"
+                    />
+                    </div>
+                    <div className="p-4">
+                      <h3 className="text-white font-medium mb-1">{price.album_name}</h3>
+                      <p className="text-gray-400 text-sm mb-3"></p>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-green-400 font-semibold">Buy: ${price.buy}</span>
+                          <button className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors" onClick={()=>{handlePriceClick(price,'buy')}}>
+                            Buy
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-blue-400 font-semibold">Rent: ${price.rent}/month</span>
+                          <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors" onClick={()=>{handlePriceClick(price,'rent')}}>
+                            Rent
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+              {popup && popData && (
+                 <PurchaseConfirmationPopup
+               isOpen={popup}
+               onClose={()=>{setPopup(false)}}
+               data={popData}
+              /> )}
+            </div>
+          );
+
+      // ADD THIS NEW CASE FOR CARDS
+      case 'cards':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-white">Payment Cards</h2>
+            
+            {/* Card Registration Form */}
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <h3 className="text-lg font-semibold text-white mb-4">Register New Card</h3>
+              <form onSubmit={handleCardSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Payment Method</label>
+                    <select
+                      value={cardForm.method}
+                      onChange={(e) => setCardForm({...cardForm, method: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select Method</option>
+                      <option value="visa">Visa</option>
+                      <option value="mastercard">Mastercard</option>
+                      <option value="amex">American Express</option>
+                      <option value="discover">Discover</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Last 4 Digits</label>
+                    <input
+                      type="text"
+                      value={cardForm.last4}
+                      onChange={(e) => setCardForm({...cardForm, last4: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500"
+                      placeholder="1234"
+                      maxLength="4"
+                      pattern="[0-9]{4}"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Expiry Date</label>
+                    <input
+                      type="text"
+                      value={cardForm.expiry}
+                      onChange={(e) => setCardForm({...cardForm, expiry: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500"
+                      placeholder="MM/YY"
+                      pattern="[0-9]{2}/[0-9]{2}"
+                      required
+                    />
+                  </div>
                 </div>
-              ))}
+                <button
+                  type="submit"
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-medium transition-colors"
+                >
+                  Register Card
+                </button>
+              </form>
+            </div>
+
+            {/* Registered Cards List */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold text-white">Registered Cards</h3>
+              {cards.length === 0 ? (
+                <div className="bg-gray-800 rounded-lg p-6 text-center">
+                  <CreditCard size={48} className="text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-400">No cards registered yet</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cards.map((card, i) => (
+                    <div key={i} className={`cursor-pointer bg-gray-800 rounded-lg p-4 border ${
+                         selectedCardIndex === i ? 'border-blue-500 ring-2 ring-blue-400' : 'border-gray-700'
+                         } transition-all`} onClick={() => setSelectedCardIndex(i)}>
+                      <div className="flex items-center space-x-3 mb-3">
+                        <div className="w-12 h-12 bg-gray-600 rounded-md flex items-center justify-center">
+                          <CreditCard size={20} className="text-gray-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-white font-medium capitalize">{card.method}</h4>
+                          <p className="text-gray-400 text-sm">•••• •••• •••• {card.last4}</p>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        <p>Expires: {card.expiry}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
+
       default:
         return <div className="text-white">Select a section from the sidebar</div>;
     }

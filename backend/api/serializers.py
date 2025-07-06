@@ -47,5 +47,28 @@ class PlayListSongSerializer(serializers.Serializer):
     playlist_name = serializers.CharField(max_length=255)
     song_name = serializers.CharField(max_length=255)
     user_id = serializers.IntegerField()
+class AlbumPricesSerializer(serializers.Serializer):
+    album_name = serializers.CharField()
+    album_image = serializers.CharField()
+    buy = serializers.DecimalField(max_digits=8, decimal_places=2)
+    rent = serializers.DecimalField(max_digits=8, decimal_places=2)
+class CardSerializer(serializers.Serializer):
+    expiry = serializers.CharField(max_length=5)
+    last4 = serializers.CharField(max_length=4)
+    method = serializers.CharField()
+    user_id = serializers.IntegerField()
+class PurchaseSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=8,decimal_places=2)
+    album_name = serializers.CharField()
+    expiry = serializers.CharField(max_length=5)
+    last4 = serializers.CharField(max_length=4)
+    method = serializers.CharField()
+
+    
+
+
+
+
+
     
 

@@ -6,7 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
 from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer,PlaylistSerializer
-from .serializers import PlaylistDataSerializer,PlayListSongSerializer
+from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,PurchaseSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .queries import getAlbumArtists
 from rest_framework.permissions import AllowAny
@@ -537,10 +537,193 @@ class ObtainPlaylistsongs(ListAPIView):
             print(e)
             return []
         
+class AlbumPrices(ListAPIView):
+    serializer_class = AlbumPricesSerializer
 
+    def get_queryset(self):
+        query = """
+                  SELECT A.album_name,A.album_image,p1.amount buy,p2.amount rent FROM Albums A
+                  JOIN Prices p1 ON (P1.ALBUM_ID = A.album_id)
+                  JOIN prices p2 ON (p2.album_id = A.album_id)
+                  WHERE p1.TYPE = 'PRCS' AND p2.TYPE= 'SUBS'
+                """
+        try:
+            connection,cursor = connect()
+            cursor.execute(query)
+            res = cursor.fetchall()
 
+            prices = [
+                {
+                    'album_name' : price[0],
+                    'album_image' : price[1],
+                    'buy' : price[2],
+                    'rent' : price[3]
+                }
+                for price in res
+            ]
+
+            return prices
+        except Exception as e:
+            print(e)
+            return []
             
+class CreateCard(CreateAPIView):
+    serializer_class = CardSerializer
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+
+        expiry = data['expiry']
+        last4 = data['last4']
+        method = data['method']
+        user_id = data['user_id']
+
+        query = 'INSERT INTO CARD_INFO VALUES (CARD_INFO_SEQ.NEXTVAL,:user_id,:method,:last4,:expiry)'
+
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{
+                'expiry' : expiry,
+                'last4' : last4,
+                'method' : method,
+                'user_id' :user_id
+            })
+            connection.commit()
+            disconnect(cursor,connection)
+
+            return Response( {"message": "Card created successfully."},status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print(e)
+
+class ObtainCardsView(ListAPIView):
+    serializer_class = CardSerializer
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('user_id')
+        query = "SELECT METHOD_TYPE,LAST4,EXPIRY FROM CARD_INFO WHERE USER_ID = :user_id"
+
+        try:
+            connection,cursor = connect()
+            cursor.execute(query,{'user_id':user_id})
+            res = cursor.fetchall()
+
+            cards = [{
+                       'expiry' : card[2],
+                       'last4' : card[1],
+                       'method' : card[0],
+                       'user_id' : user_id
+                     }
+                     for card in res
+            ]
+
+            return cards
+        except Exception as e:
+            print(e)
+            return []
 
 
+class Subscribe(CreateAPIView):
+    serializer_class = PurchaseSerializer
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+
+        amount = data['amount']
+        album_name = data['album_name']
+        expiry = data['expiry']
+        last4 = data['last4']
+        method = data['method']
+
+        try:
+            connection,cursor = connect()
+
+            query = 'SELECT transaction_seq.NEXTVAL FROM DUAL'
+            cursor.execute(query)
+            trans_id = cursor.fetchone()[0]
+
+            query = 'SELECT info_id FROM CARD_INFO WHERE last4 = :last4 AND expiry= :expiry AND method_type = :method'
+            cursor.execute(query,{
+                'last4' : last4,
+                'expiry' : expiry,
+                'method' : method
+            })
+            info_id = cursor.fetchone()[0]
+
+
+            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'SUCCESS',SYSDATE)"
+            cursor.execute(query,{
+               'trans_id' : trans_id,
+               'info_id' : info_id,
+               'amount' : amount,
+            })
+
+            query = """
+                       INSERT INTO SUBSCRIPTION VALUES(SUBSCRIPTION_SEQ.NEXTVAL,(SELECT ALBUM_ID FROM ALBUMS WHERE
+                       ALBUM_NAME = :album_name),:trans_id,SYSDATE,ADD_MONTHS(SYSDATE,1),SYSDATE)
+                    """
+            cursor.execute(query,{
+                'album_name' : album_name,
+                'trans_id' : trans_id
+            })
+
+            connection.commit()
+            disconnect(cursor,connection)
+
+            return Response( {"message": "Subscription created successfully."},status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print(e)
+
+class Purchase(CreateAPIView):
+    serializer_class = PurchaseSerializer
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+
+        amount = data['amount']
+        album_name = data['album_name']
+        expiry = data['expiry']
+        last4 = data['last4']
+        method = data['method']
+
+        try:
+            connection,cursor = connect()
+
+            query = 'SELECT transaction_seq.NEXTVAL FROM DUAL'
+            cursor.execute(query)
+            trans_id = cursor.fetchone()[0]
+
+            query = 'SELECT info_id FROM CARD_INFO WHERE last4 = :last4 AND expiry= :expiry AND method_type = :method'
+            cursor.execute(query,{
+                'last4' : last4,
+                'expiry' : expiry,
+                'method' : method
+            })
+            info_id = cursor.fetchone()[0]
+
+
+            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'SUCCESS',SYSDATE)"
+            cursor.execute(query,{
+               'trans_id' : trans_id,
+               'info_id' : info_id,
+               'amount' : amount,
+            })
+
+            query = """
+                       INSERT INTO PURCHASES VALUES(PURCHASES_SEQ.NEXTVAL,(SELECT ALBUM_ID FROM ALBUMS WHERE
+                       ALBUM_NAME = :album_name),:trans_id,SYSDATE)
+                    """
+            cursor.execute(query,{
+                'album_name' : album_name,
+                'trans_id' : trans_id
+            })
+
+            connection.commit()
+            disconnect(cursor,connection)
+
+            return Response( {"message": "Purchase created successfully."},status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print(e)
+        
                   
         
