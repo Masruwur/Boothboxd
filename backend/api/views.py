@@ -638,7 +638,7 @@ class Subscribe(CreateAPIView):
         try:
             connection,cursor = connect()
 
-            query = 'SELECT transaction_seq.NEXTVAL FROM DUAL'
+            query = 'SELECT transactions_seq.NEXTVAL FROM DUAL'
             cursor.execute(query)
             trans_id = cursor.fetchone()[0]
 
@@ -651,7 +651,7 @@ class Subscribe(CreateAPIView):
             info_id = cursor.fetchone()[0]
 
 
-            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'SUCCESS',SYSDATE)"
+            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'S',SYSDATE)"
             cursor.execute(query,{
                'trans_id' : trans_id,
                'info_id' : info_id,
@@ -689,7 +689,7 @@ class Purchase(CreateAPIView):
         try:
             connection,cursor = connect()
 
-            query = 'SELECT transaction_seq.NEXTVAL FROM DUAL'
+            query = 'SELECT transactions_seq.NEXTVAL FROM DUAL'
             cursor.execute(query)
             trans_id = cursor.fetchone()[0]
 
@@ -702,7 +702,7 @@ class Purchase(CreateAPIView):
             info_id = cursor.fetchone()[0]
 
 
-            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'SUCCESS',SYSDATE)"
+            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'S',SYSDATE)"
             cursor.execute(query,{
                'trans_id' : trans_id,
                'info_id' : info_id,
@@ -726,4 +726,51 @@ class Purchase(CreateAPIView):
             print(e)
         
                   
+
+class UserAlbums(ListAPIView):
+    serializer_class = AlbumSerializer
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('user_id')
+
+        try:
+            query = """
+                      (SELECT a.album_name,a.album_image,a.RELEASE_YEAR FROM 
+                       users U JOIN card_info C ON (U.user_id = C.user_id)
+                       JOIN TRANSACTIONS T ON (T.INFO_ID = C.INFO_ID )
+                       JOIN SUBSCRIPTION s ON (s.TRANS_ID = T.TRANS_ID )
+                       JOIN albums a ON (a.ALBUM_ID = s.ALBUM_ID )
+                       WHERE u.user_id = :user_id AND SYSDATE<s."to")
+                       UNION
+                       (SELECT A.album_name,a.album_image,a.RELEASE_YEAR FROM 
+                       users U JOIN card_info C ON (U.user_id = C.user_id)
+                       JOIN TRANSACTIONS T ON (T.INFO_ID = C.INFO_ID )
+                       JOIN PURCHASES s ON (s.TRANS_ID = T.TRANS_ID )
+                       JOIN albums a ON (a.ALBUM_ID = s.ALBUM_ID )
+                       WHERE u.user_id = :user_id)
+                    """
+            connection,cursor = connect()
+            cursor.execute(query,{'user_id':user_id})
+            user_albums = cursor.fetchall()
+
+            album_data = []
+
+            for album in user_albums:
+                album_artists = getAlbumArtists(cursor,album[0])
+                #artist_list = ", ".join([t[0] for t in album_artists])
+                artist_list = album_artists[0][0]
+
+                album_data.append({
+                    'album_name' : album[0],
+                    'album_artist' : artist_list,
+                    'album_image' : album[1],
+                    'year' : str(album[2].year)
+                })
+
+            return album_data
+        except Exception as e:
+            print(e)
+            return []
+
+            
         

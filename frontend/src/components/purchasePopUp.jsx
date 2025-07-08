@@ -24,9 +24,30 @@ const PurchaseConfirmationPopup = ({isOpen,onClose,data}) => {
    fetchData()
   },[])
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     // Handle purchase confirmation logic here
-    alert(`${data.ops === 'buy' ? 'Purchase' : 'Rental'} confirmed!`);
+    const common = {
+       album_name : data.album_name,
+       expiry : data.expiry,
+       last4 : data.last4,
+       method : data.method
+    }
+    
+    if(data.ops==='rent'){
+       const postData = {
+        amount : data.rent,
+        ...common
+       }
+       await api.post('market/subscribe/',postData)
+    }
+
+    if(data.ops==='buy'){
+      const postData = {
+        amount : data.buy,
+        ...common
+       }
+       await api.post('market/purchase/',postData)
+    }
     onClose();
   };
 

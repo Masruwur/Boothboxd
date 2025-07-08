@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import SignUpView,LoginView,UniqueAlbumObtainView,AlbumSongObtainView,ArtistSongView,ArtistAlbumView,UniqueArtistObtainView,AlbumFilter,UserObtain,AlbumGenreObtain,CreatePlaylist
-from .views import GetUserPlaylists,AddPlaylistSong,ObtainPlaylistsongs,AlbumPrices,CreateCard,ObtainCardsView,Subscribe,Purchase
+from .views import GetUserPlaylists,AddPlaylistSong,ObtainPlaylistsongs,AlbumPrices,CreateCard,ObtainCardsView,Subscribe,Purchase,UserAlbums
 
 urlpatterns = [
     path('signup/',view=SignUpView.as_view(),name='signup'),
@@ -21,5 +21,6 @@ urlpatterns = [
     path('cards/create/',view=CreateCard.as_view()),
     path('cards/<int:user_id>/',view=ObtainCardsView.as_view()),
     path('market/subscribe/',view=Subscribe.as_view()),
-    path('market/purchase/',view=Purchase.as_view())
+    path('market/purchase/',view=Purchase.as_view()),
+    path('albums/users/<int:user_id>/',view=UserAlbums.as_view()),
 ]

@@ -13,7 +13,9 @@ import {
   Menu, 
   X,
   User,
-  CreditCard 
+  CreditCard,
+  Music,
+  Play 
 } from 'lucide-react';
 
 export default function Home() {
@@ -40,6 +42,7 @@ export default function Home() {
   const [prices,setPrices] = useState([])
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
   const [popData,setpopData] = useState(null)
+  const [userAlbums, setUserAlbums] = useState([]);
 
 
   const navigationItems = [
@@ -48,6 +51,7 @@ export default function Home() {
     { name: 'Playlists', key: 'playlists', icon: List },
     { name: 'Marketplace', key: 'marketplace', icon: ShoppingBag },
     { name: 'Cards', key: 'cards', icon: CreditCard }, 
+    { name: 'My Albums', key: 'my albums', icon: Music },
   ];
 
 
@@ -124,6 +128,24 @@ useEffect(()=>{
     };
     fetchCards();
 },[activeSection])
+
+useEffect(() => {
+    const fetchUserAlbums = async () => {
+        if (activeSection !== 'my albums') return;
+        
+        try {
+            const token = localStorage.getItem(ACCESS_TOKEN);
+            const user_id = jwtDecode(token).user_id;
+            const res = await api.get(`albums/users/${user_id}/`);
+            setUserAlbums(res.data);
+            console.log(res.data)
+        } catch (err) {
+            console.error("Failed to fetch user albums:", err);
+        }
+    };
+
+    fetchUserAlbums();
+}, [activeSection]);
 
 
   const handlePlaylistClick = (playlist_name) =>{
@@ -442,6 +464,65 @@ useEffect(()=>{
             </div>
           </div>
         );
+
+        
+    case 'my albums':
+            return (
+              <div className="space-y-6">
+                <h2 className="text-3xl font-bold text-white">My Albums</h2>
+                
+                {/* Album Collection */}
+                <div className="space-y-4">
+                  {userAlbums.length === 0 ? (
+                    <div className="bg-gray-800 rounded-lg p-8 text-center">
+                      <Music size={48} className="text-gray-400 mx-auto mb-3" />
+                      <p className="text-gray-400">No albums in your collection yet</p>
+                      <p className="text-gray-500 text-sm mt-2">Start adding your favorite albums to build your collection</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                      {userAlbums.map((album, i) => (
+                        <div key={i} className="group cursor-pointer transition-all duration-300 hover:scale-105" onClick={()=>{HandleClick(album.album_name)}}>
+                          <div className="relative w-full h-[200px] rounded-lg overflow-hidden bg-gray-800 shadow-lg">
+                            {/* Album Cover */}
+                            <div 
+                              className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center"
+                              style={{
+                                backgroundImage: album.album_image ? `url(${album.album_image})` : 'none',
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center'
+                              }}
+                            >
+                              {!album.album_image && (
+                                <Music size={48} className="text-white opacity-50" />
+                              )}
+                            </div>
+                            
+                           
+                            
+                            {/* Year Badge */}
+                            <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                              {album.year}
+                            </div>
+                          </div>
+                          
+                          {/* Album Info */}
+                          <div className="mt-3 space-y-1">
+                            <h3 className="text-white font-medium text-sm leading-tight line-clamp-2 group-hover:text-green-400 transition-colors">
+                              <img></img>
+                              {album.album_name}
+                            </h3>
+                            <p className="text-gray-400 text-xs leading-tight line-clamp-1">
+                              {album.album_artist}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
 
       default:
         return <div className="text-white">Select a section from the sidebar</div>;
