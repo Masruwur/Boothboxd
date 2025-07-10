@@ -2,11 +2,17 @@ import React, { useState } from 'react';
 import api from '../api'
 import { useNavigate } from 'react-router-dom';
 import { ACCESS_TOKEN } from '../constants';
+import { jwtDecode } from 'jwt-decode';
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+
+function isValidAdminId(id) {
+  return /^22\d{5}$/.test(id);
+}
+
 
   const handleLogin = async (e) => {
     localStorage.removeItem(ACCESS_TOKEN); 
@@ -18,7 +24,14 @@ export default function LoginPage() {
     try {
     const res = await api.post("login/", credentials);
     localStorage.setItem(ACCESS_TOKEN, res.data.access);
-    navigate("/home");
+    const data = jwtDecode(res.data.access)
+    const admin_id = data.user_id
+    if(isValidAdminId(admin_id)){
+      navigate("/admin");
+    }else{
+       navigate("/home");
+    }
+   
     }  catch (error) {
     console.error(error)
     console.log(error.response?.data)

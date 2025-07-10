@@ -1,15 +1,23 @@
 from django.core.files.storage import default_storage
 from django.contrib.auth.hashers import make_password,check_password
-from rest_framework.generics import CreateAPIView,GenericAPIView,ListAPIView
+from rest_framework.generics import CreateAPIView,GenericAPIView,ListAPIView,UpdateAPIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
 from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer,PlaylistSerializer
-from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,PurchaseSerializer
+from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,PurchaseSerializer,UserFullSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .queries import getAlbumArtists
 from rest_framework.permissions import AllowAny
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from .queries import search_albums,reg_album_by_id
+
+
+
 
 class SignUpView(CreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -80,14 +88,17 @@ class LoginView(GenericAPIView):
 
         try:
             connection, cursor = connect()
-            cursor.execute("SELECT user_id, password,user_image FROM users WHERE user_title = :title", {'title': user_title})
+            cursor.execute("SELECT user_id, password,user_image,status FROM users WHERE user_title = :title", {'title': user_title})
             row = cursor.fetchone()
             disconnect(cursor, connection)
 
             if not row:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            user_id, hashed_password , user_image = row
+            user_id, hashed_password , user_image ,stat = row
+
+            if stat != 'S':
+                return Response({'error': 'Incorrect password'}, status=status.HTTP_401_UNAUTHORIZED)
 
             if not check_password(password, hashed_password):
                 return Response({'error': 'Incorrect password'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -771,6 +782,117 @@ class UserAlbums(ListAPIView):
         except Exception as e:
             print(e)
             return []
+        
+class ObtainFullUsers(ListAPIView):
+    serializer_class = UserFullSerializer
+
+    def get_queryset(self):
+        try:
+            query = """
+                    select user_name,user_title,created_at,status,user_id from users
+                    """
+            connection,cursor = connect()
+            cursor.execute(query)
+            users = cursor.fetchall()
+
+            disconnect(cursor,connection)
+
+            user_data = [{
+                'user_id' : user[4],
+                'user_name' : user[0],
+                'user_title' : user[1],
+                'join_date' : str(user[2]),
+                'user_status' : user[3]  
+            }
+            for user in users]
+
+            return user_data
+        except Exception as e:
+            print(e)
+            return []
+        
+@csrf_exempt
+def BlockUser(request,user_id):
+    if(request.method=='POST'):
+        try:
+            connection,cursor = connect();
+            query = "update users set status='B' where user_id = :user_id"
+            cursor.execute(query,{'user_id':user_id})
+            connection.commit()
+            disconnect(cursor,connection)
+            return JsonResponse({'message': 'User blocked successfully'})
+        except Exception as e:
+            print(e)
+@csrf_exempt
+def UnblockUser(request,user_id):
+    if(request.method=='POST'):
+        try:
+            connection,cursor = connect();
+            query = "update users set status='S' where user_id = :user_id"
+            cursor.execute(query,{'user_id':user_id})
+            connection.commit()
+            disconnect(cursor,connection)
+        except Exception as e:
+            print(e)
+
+@csrf_exempt
+def QueryAlbums(request,query):
+    if request.method=='GET':
+        try:
+            client_id = "86515bf4a83049d2bca32f954369399e"
+            client_secret = "0c3dc407799b4b5d88c1b22be85544ac"
+            client_credential_manager = SpotifyClientCredentials(
+              client_id=client_id,
+              client_secret=client_secret
+            )
+
+            sp = spotipy.Spotify(client_credentials_manager=client_credential_manager)
+            search_query = query.replace('%20',' ')
+
+            data = search_albums(sp,search_query)
+
+            return JsonResponse(data,safe=False)
+        except Exception as e:
+            print(e)
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+@csrf_exempt
+def RegisterAlbum(request,album_id):
+    if request.method=='POST':
+        try:
+            client_id = "86515bf4a83049d2bca32f954369399e"
+            client_secret = "0c3dc407799b4b5d88c1b22be85544ac"
+            client_credential_manager = SpotifyClientCredentials(
+              client_id=client_id,
+              client_secret=client_secret
+            )
+
+            sp = spotipy.Spotify(client_credentials_manager=client_credential_manager)
+            
+            connection,cursor = connect()
+
+            if reg_album_by_id(album_id,sp,cursor) == True:
+                connection.commit()
+
+            disconnect(cursor,connection)
+
+            return  JsonResponse({'message': f'{album_id} registered'}, status=200)
+        except Exception as e:
+            print(e)
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+
+    
+
+
+
+
+        
+
 
             
         

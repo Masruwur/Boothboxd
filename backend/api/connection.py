@@ -15,4 +15,3 @@ def connect():
 def disconnect(cursor,connection):
     cursor.close()
     connection.close()
-

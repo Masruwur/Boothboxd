@@ -64,7 +64,12 @@ class PurchaseSerializer(serializers.Serializer):
     last4 = serializers.CharField(max_length=4)
     method = serializers.CharField()
 
-    
+class UserFullSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    user_name = serializers.CharField()
+    user_title = serializers.CharField()
+    join_date = serializers.CharField()
+    user_status = serializers.CharField()
 
 
 

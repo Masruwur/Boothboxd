@@ -1,5 +1,6 @@
 from models import Album,Song,Genre,Artist
 import register
+import json
 
 
 def query_album(search_query,sp,cursor):
@@ -59,5 +60,24 @@ def query_album(search_query,sp,cursor):
         return True
     except:
         return False
+    
+
+
+def search_albums(sp,search_query):
+    results = sp.search(q=search_query, type='album', limit=5)
+    albums = []
+
+    for item in results['albums']['items']:
+        album = {
+            'id': item['id'],
+            'name': item['name'],
+            'image': item['images'][1]['url'] if item['images'] else None,
+            'artist': item['artists'][0]['name'] if item['artists'] else None,
+            'date': item['release_date'][:4]
+        }
+        albums.append(album)
+
+    return json.dumps(albums, indent=2)
+
          
     

@@ -8,6 +8,8 @@ import AlbumPage from './pages/Album'
 import { BrowserRouter,Route,Routes, Navigate } from "react-router-dom"
 import ProtectedRoute from './components/ProtectedRoute'
 import PlaylistPage from './pages/Playlist'
+import BoothboxdAdmin from './pages/Admin'
+import AdminRoute from './components/AdminRoute'
 
 function Logout(){
   localStorage.clear()
@@ -41,6 +43,10 @@ function App() {
           <ProtectedRoute>
           <PlaylistPage/>
           </ProtectedRoute>} />
+          <Route path="/admin" element={
+          <AdminRoute>
+          <BoothboxdAdmin/>
+          </AdminRoute>} />
       </Routes>
     </BrowserRouter>
   )
