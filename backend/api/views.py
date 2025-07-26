@@ -15,6 +15,8 @@ from django.views.decorators.csrf import csrf_exempt
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from .queries import search_albums,reg_album_by_id
+from decimal import Decimal
+import json
 
 
 
@@ -327,6 +329,7 @@ class AlbumFilter(ListAPIView):
                     AND (:genre_name = ' ' OR UPPER(G.genre_name) LIKE '%' || UPPER(:genre_name) || '%')
                     AND (:year = ' ' OR (A.release_year BETWEEN ADD_MONTHS(TO_DATE(:year,'YYYY'),-24) 
                     AND ADD_MONTHS(TO_DATE(:year,'YYYY'),24)))
+                    ORDER BY A.album_name
                 """
         try:
             connection,cursor = connect()
@@ -543,6 +546,8 @@ class ObtainPlaylistsongs(ListAPIView):
                 for song in res
             ]
 
+            disconnect(cursor,connection)
+
             return songs
         except Exception as e:
             print(e)
@@ -589,7 +594,7 @@ class CreateCard(CreateAPIView):
         method = data['method']
         user_id = data['user_id']
 
-        query = 'INSERT INTO CARD_INFO VALUES (CARD_INFO_SEQ.NEXTVAL,:user_id,:method,:last4,:expiry)'
+        query = 'INSERT INTO CARD_INFO VALUES (CARD_INFO_SEQ.NEXTVAL,:user_id,:method,:last4,:expiry,200)'
 
         try:
             connection,cursor = connect()
@@ -612,7 +617,7 @@ class ObtainCardsView(ListAPIView):
 
     def get_queryset(self):
         user_id = self.kwargs.get('user_id')
-        query = "SELECT METHOD_TYPE,LAST4,EXPIRY FROM CARD_INFO WHERE USER_ID = :user_id"
+        query = "SELECT METHOD_TYPE,LAST4,EXPIRY,BALANCE FROM CARD_INFO WHERE USER_ID = :user_id"
 
         try:
             connection,cursor = connect()
@@ -623,7 +628,8 @@ class ObtainCardsView(ListAPIView):
                        'expiry' : card[2],
                        'last4' : card[1],
                        'method' : card[0],
-                       'user_id' : user_id
+                       'user_id' : user_id,
+                       'balance' : card[3]
                      }
                      for card in res
             ]
@@ -640,50 +646,82 @@ class Subscribe(CreateAPIView):
     def perform_create(self, serializer):
         data = serializer.validated_data
 
-        amount = data['amount']
+        amount = Decimal(str(data['amount']))
         album_name = data['album_name']
         expiry = data['expiry']
         last4 = data['last4']
         method = data['method']
+        user_id = data['user_id']
+
 
         try:
             connection,cursor = connect()
 
-            query = 'SELECT transactions_seq.NEXTVAL FROM DUAL'
-            cursor.execute(query)
-            trans_id = cursor.fetchone()[0]
-
-            query = 'SELECT info_id FROM CARD_INFO WHERE last4 = :last4 AND expiry= :expiry AND method_type = :method'
+            query = 'SELECT info_id,balance FROM CARD_INFO WHERE last4 = :last4 AND expiry= :expiry AND method_type = :method'
             cursor.execute(query,{
                 'last4' : last4,
                 'expiry' : expiry,
                 'method' : method
             })
-            info_id = cursor.fetchone()[0]
+            res = cursor.fetchone()
+            info_id = res[0]
+            balance = Decimal(str(res[1]))
 
 
-            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'S',SYSDATE)"
+            query = 'SELECT transactions_seq.NEXTVAL FROM DUAL'
+            cursor.execute(query)
+            trans_id = cursor.fetchone()[0]
+
+            query = ''
+            if(amount>balance):
+                 query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'F',SYSDATE)"
+            else:
+                 query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'S',SYSDATE)"
+
+
             cursor.execute(query,{
                'trans_id' : trans_id,
                'info_id' : info_id,
                'amount' : amount,
             })
 
+            connection.commit()
+
+
+            if(balance>=amount):
+                    query = """
+                            update card_info set balance = :new_balance where user_id = :user_id and info_id = :info_id
+                            """
+                    cursor.execute(query,{
+                        'user_id':user_id,
+                        'new_balance': balance-amount,
+                        'info_id' : info_id
+                    })
+
+        
             query = """
                        INSERT INTO SUBSCRIPTION VALUES(SUBSCRIPTION_SEQ.NEXTVAL,(SELECT ALBUM_ID FROM ALBUMS WHERE
-                       ALBUM_NAME = :album_name),:trans_id,SYSDATE,ADD_MONTHS(SYSDATE,1),SYSDATE)
+                       ALBUM_NAME = :album_name),:trans_id,SYSDATE,ADD_MONTHS(SYSDATE,1),SYSDATE,:user_id)
                     """
-            cursor.execute(query,{
-                'album_name' : album_name,
-                'trans_id' : trans_id
-            })
+            try:
+                cursor.execute(query,{
+                    'album_name' : album_name,
+                    'trans_id' : trans_id,
+                    'user_id':user_id
+                })
 
-            connection.commit()
+                connection.commit()
+            except Exception as e:
+                connection.rollback()
+                disconnect(cursor,connection)
+                return Response( {"message": "Purchase failed"},status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
             disconnect(cursor,connection)
 
-            return Response( {"message": "Subscription created successfully."},status=status.HTTP_201_CREATED)
+            return Response( {"message": "Purchase created successfully."},status=status.HTTP_201_CREATED)
         except Exception as e:
-            print(e)
+                print(e)
+        
 
 class Purchase(CreateAPIView):
     serializer_class = PurchaseSerializer
@@ -691,50 +729,81 @@ class Purchase(CreateAPIView):
     def perform_create(self, serializer):
         data = serializer.validated_data
 
-        amount = data['amount']
+        amount = Decimal(str(data['amount']))
         album_name = data['album_name']
         expiry = data['expiry']
         last4 = data['last4']
         method = data['method']
+        user_id = data['user_id']
 
         try:
             connection,cursor = connect()
 
-            query = 'SELECT transactions_seq.NEXTVAL FROM DUAL'
-            cursor.execute(query)
-            trans_id = cursor.fetchone()[0]
-
-            query = 'SELECT info_id FROM CARD_INFO WHERE last4 = :last4 AND expiry= :expiry AND method_type = :method'
+            query = 'SELECT info_id,balance FROM CARD_INFO WHERE last4 = :last4 AND expiry= :expiry AND method_type = :method'
             cursor.execute(query,{
                 'last4' : last4,
                 'expiry' : expiry,
                 'method' : method
             })
-            info_id = cursor.fetchone()[0]
+            res = cursor.fetchone()
+            info_id = res[0]
+            balance = Decimal(str(res[1]))
 
 
-            query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'S',SYSDATE)"
+            query = 'SELECT transactions_seq.NEXTVAL FROM DUAL'
+            cursor.execute(query)
+            trans_id = cursor.fetchone()[0]
+
+            query = ''
+            if(amount>balance):
+                 query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'F',SYSDATE)"
+            else:
+                 query = "INSERT INTO TRANSACTIONS VALUES (:trans_id,:info_id,:amount,'S',SYSDATE)"
+
+
             cursor.execute(query,{
                'trans_id' : trans_id,
                'info_id' : info_id,
                'amount' : amount,
             })
 
+            connection.commit()
+
+
+            if(balance>=amount):
+                    query = """
+                            update card_info set balance = :new_balance where user_id = :user_id and info_id = :info_id
+                            """
+                    cursor.execute(query,{
+                        'user_id':user_id,
+                        'new_balance': balance-amount,
+                        'info_id' : info_id
+                    })
+            else:
+                print('here')
+
             query = """
                        INSERT INTO PURCHASES VALUES(PURCHASES_SEQ.NEXTVAL,(SELECT ALBUM_ID FROM ALBUMS WHERE
-                       ALBUM_NAME = :album_name),:trans_id,SYSDATE)
+                       ALBUM_NAME = :album_name),:trans_id,SYSDATE,:user_id)
                     """
-            cursor.execute(query,{
-                'album_name' : album_name,
-                'trans_id' : trans_id
-            })
+            try:
+                cursor.execute(query,{
+                    'album_name' : album_name,
+                    'trans_id' : trans_id,
+                    'user_id' : user_id
+                })
 
-            connection.commit()
+                connection.commit()
+            except Exception as e:
+                connection.rollback()
+                disconnect(cursor,connection)
+                return Response( {"message": "Purchase failed"},status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
             disconnect(cursor,connection)
 
             return Response( {"message": "Purchase created successfully."},status=status.HTTP_201_CREATED)
         except Exception as e:
-            print(e)
+                print(e)
         
                   
 
@@ -884,6 +953,37 @@ def RegisterAlbum(request,album_id):
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+@csrf_exempt
+def setPrice(request):
+    if request.method=='POST':
+        data = json.loads(request.body)
+        new_price = data.get('price')
+        album_name = data.get('album_name')
+        price_type = data.get('type')
+        print(new_price,album_name,price_type)
+
+        connection,cursor = connect()
+        try:
+            
+             query = ''
+             if price_type == 'buy':
+                 query = '''update prices set amount = :new_price where type = 'PRCS' and album_id = (select album_id from albums where album_name = :album_name) '''
+             else:
+                 query = '''update prices set amount = :new_price where type = 'SUBS' and album_id = (select album_id from albums where album_name = :album_name) '''
+
+             cursor.execute(query,{
+                'new_price' : new_price,
+                'album_name' : album_name
+             })
+
+             connection.commit()
+             return JsonResponse({'message': 'Price updated successfully'})
+        except Exception as e:
+            connection.rollback()
+            print(e)
+
+        disconnect(cursor,connection)
 
 
     

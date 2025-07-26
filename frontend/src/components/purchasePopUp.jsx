@@ -1,6 +1,8 @@
 import React, { useState,useEffect } from 'react';
 import { X, Music, Calendar, CreditCard } from 'lucide-react';
 import api from '../api';
+import { jwtDecode } from 'jwt-decode';
+import { ACCESS_TOKEN } from '../constants';
 
 const PurchaseConfirmationPopup = ({isOpen,onClose,data}) => {
   const [albumData,setAlbumData] = useState({})
@@ -25,20 +27,27 @@ const PurchaseConfirmationPopup = ({isOpen,onClose,data}) => {
   },[])
 
   const handleConfirm = async () => {
-    // Handle purchase confirmation logic here
+    const token = localStorage.getItem(ACCESS_TOKEN)
+    const user_id = jwtDecode(token).user_id
     const common = {
        album_name : data.album_name,
        expiry : data.expiry,
        last4 : data.last4,
-       method : data.method
+       method : data.method,
+       user_id : user_id
     }
-    
-    if(data.ops==='rent'){
+
+    try{
+       if(data.ops==='rent'){
        const postData = {
         amount : data.rent,
         ...common
        }
+        if(data.balance && data.rent && parseFloat(data.balance)<parseFloat(data.rent)){
+          alert("Subscription failed due to insufficient balance")
+        }
        await api.post('market/subscribe/',postData)
+
     }
 
     if(data.ops==='buy'){
@@ -46,7 +55,18 @@ const PurchaseConfirmationPopup = ({isOpen,onClose,data}) => {
         amount : data.buy,
         ...common
        }
+       // console.log(data)
+        console.log(data.balance)
+        console.log(data.buy)
+        console.log(data.rent)
+        if(data.balance && data.buy && parseFloat(data.balance)<parseFloat(data.buy)){
+          alert("Purchase failed due to insufficient balance")
+        }
        await api.post('market/purchase/',postData)
+      }
+    }
+    catch(error){
+      console.log(error)
     }
     onClose();
   };

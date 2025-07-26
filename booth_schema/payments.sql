@@ -3,7 +3,8 @@ CREATE TABLE card_info (
   user_id NUMBER,
   method_type VARCHAR2(255),
   last4 CHAR(4),
-  expiry CHAR(5)
+  expiry CHAR(5),
+  balance NUMBER
 );
 
 CREATE TABLE transactions (
@@ -18,7 +19,8 @@ CREATE TABLE purchases (
   purchase_id NUMBER PRIMARY KEY,
   album_id NUMBER,
   trans_id NUMBER,
-  created_at DATE
+  created_at DATE,
+  user_id NUMBER
 );
 
 CREATE TABLE subscription (
@@ -27,7 +29,8 @@ CREATE TABLE subscription (
   trans_id NUMBER,
   "from" DATE,
   "to" DATE,
-  created_at DATE
+  created_at DATE,
+  user_id NUMBER
 );
 
 CREATE TABLE prices (

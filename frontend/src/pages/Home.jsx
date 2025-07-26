@@ -452,6 +452,7 @@ useEffect(() => {
                         <div>
                           <h4 className="text-white font-medium capitalize">{card.method}</h4>
                           <p className="text-gray-400 text-sm">•••• •••• •••• {card.last4}</p>
+                          <p className="text-gray-400 text-sm">balance: {card.balance}$</p>
                         </div>
                       </div>
                       <div className="text-sm text-gray-400">

@@ -1,5 +1,5 @@
 import React, { useState,useEffect } from 'react';
-import { Users, TrendingUp, Star, Plus, LogOut, Search, User, Calendar, Shield } from 'lucide-react';
+import { Users, TrendingUp, Star, Plus, LogOut, Search, User, Calendar, Shield, Music, DollarSign } from 'lucide-react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,9 +9,14 @@ export default function BoothboxdAdmin() {
   const [albumSearch, setAlbumSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [users, setUsers] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [pricingAlbum, setPricingAlbum] = useState(null);
+  const [rentPriceInput, setRentPriceInput] = useState('');
+  const [buyPriceInput, setBuyPriceInput] = useState('');
 
   const sidebarItems = [
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'albums', label: 'Albums', icon: Music },
     { id: 'market-stats', label: 'Market Stats', icon: TrendingUp },
     { id: 'popularity', label: 'Popularity', icon: Star },
     { id: 'add-albums', label: 'Add Albums', icon: Plus }
@@ -37,6 +42,21 @@ export default function BoothboxdAdmin() {
     fetchUsers();
   },[])
 
+  useEffect(()=>{
+    const fetchAlbums = async ()=>{
+        try{
+            const res = await api.get('albums/')
+            setAlbums(res.data)
+        }
+        catch(e){
+            console.log(e)
+        }
+    }
+    if(activeTab === 'albums') {
+      fetchAlbums();
+    }
+  },[activeTab])
+
   const handleAlbumSearch = async (query) => {
     setAlbumSearch(query);
     if (query.trim()) {
@@ -48,11 +68,9 @@ export default function BoothboxdAdmin() {
     }
   };
 
-
   const logout = ()=>{
       localStorage.clear()
       navigate('/login')
-
   }
 
   const handleBlockUser = async (userId) => {
@@ -70,8 +88,55 @@ export default function BoothboxdAdmin() {
   };
 
   const handleAddAlbum = async (albumId) => {
-    console.log('Adding album with ID:', albumId);
     await api.post(`albums/add/${albumId}/`,{})
+    alert("Album added")
+  };
+
+  const handleSetPrice = (album) => {
+    setPricingAlbum(album);
+    setRentPriceInput(album.rent_price || '');
+    setBuyPriceInput(album.buy_price || '');
+  };
+
+  const handleRentPriceSubmit = async () => {
+    if (!rentPriceInput || isNaN(rentPriceInput) || parseFloat(rentPriceInput) < 0) {
+      alert('Please enter a valid rent price');
+      return;
+    }
+    
+    try {
+      await api.post(`setprice/`, {price: parseFloat(rentPriceInput),album_name: pricingAlbum.album_name,type: 'rent' });
+      console.log('Rent price:', rentPriceInput);
+      alert('Rent price updated successfully');
+    } catch (e) {
+      console.log(e);
+      alert('Failed to update rent price');
+    }
+  };
+
+  const handleBuyPriceSubmit = async () => {
+    if (!buyPriceInput || isNaN(buyPriceInput) || parseFloat(buyPriceInput) < 0) {
+      alert('Please enter a valid buy price');
+      return;
+    }
+    
+    try {
+      await api.post(`setprice/`, {price: parseFloat(buyPriceInput),album_name: pricingAlbum.album_name,type: 'buy' });
+      console.log('Buy price:', buyPriceInput);
+      
+      
+      
+      alert('Buy price updated successfully');
+    } catch (e) {
+      console.log(e);
+      alert('Failed to update buy price');
+    }
+  };
+
+  const handleCancelPricing = () => {
+    setPricingAlbum(null);
+    setRentPriceInput('');
+    setBuyPriceInput('');
   };
 
   const renderUsers = () => {
@@ -157,6 +222,120 @@ export default function BoothboxdAdmin() {
       </div>
     );
   };
+
+  const renderAlbums = () => (
+    <div className="space-y-6">
+      <div className="flex items-center space-x-2 mb-6">
+        <Music className="w-6 h-6 text-green-400" />
+        <h2 className="text-2xl font-bold text-white">Album Management</h2>
+      </div>
+      
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">All Albums</h3>
+        <div className="grid gap-4">
+          {albums.map((album,id) => (
+            <div key={id} className="flex items-center space-x-4 p-4 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors">
+              <img 
+                src={album.album_image || album.cover || 'https://via.placeholder.com/64x64/1a1a1a/666?text=Album'} 
+                alt={album.album_name}
+                className="w-16 h-16 rounded-lg object-cover"
+              />
+              <div className="flex-1">
+                <h4 className="font-semibold text-white">{album.album_name}</h4>
+                <p className="text-gray-400">{album.album_artist}</p>
+              </div>
+              <button
+                onClick={() => handleSetPrice(album)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>Set Price</span>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Price Setting Modal */}
+      {pricingAlbum && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-96 max-w-90vw">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Set Prices for "{pricingAlbum.album_name}"
+            </h3>
+            <div className="flex items-center space-x-4 mb-6">
+              <img 
+                src={pricingAlbum.album_image} 
+                alt={pricingAlbum.album_name}
+                className="w-12 h-12 rounded-lg object-cover"
+              />
+              <div>
+                <p className="text-white font-medium">{pricingAlbum.album_name}</p>
+                <p className="text-gray-400 text-sm">{pricingAlbum.album_artist}</p>
+              </div>
+            </div>
+            
+            {/* Rent Price Section */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Rent Price ($)
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={rentPriceInput}
+                  onChange={(e) => setRentPriceInput(e.target.value)}
+                  placeholder="Enter rent price"
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  onClick={handleRentPriceSubmit}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Set Rent
+                </button>
+              </div>
+            </div>
+
+            {/* Buy Price Section */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Buy Price ($)
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={buyPriceInput}
+                  onChange={(e) => setBuyPriceInput(e.target.value)}
+                  placeholder="Enter buy price"
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  onClick={handleBuyPriceSubmit}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Set Buy
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleCancelPricing}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const renderAddAlbums = () => (
     <div className="space-y-6">
@@ -275,6 +454,8 @@ export default function BoothboxdAdmin() {
     switch (activeTab) {
       case 'users':
         return renderUsers();
+      case 'albums':
+        return renderAlbums();
       case 'add-albums':
         return renderAddAlbums();
       case 'market-stats':

@@ -46,6 +46,7 @@ const AlbumPage = () => {
               const artistRaw = `artists/${artistName}/`;
               const artistUrl = artistRaw.replace(/ /g,'%20')
               const res = await api.get(artistUrl)
+              
 
               setArtistData(res.data[0])
 
@@ -128,10 +129,15 @@ const AlbumPage = () => {
               <div>
                 <h1 className="text-4xl font-bold text-white mb-2">{albumParam.albumName}</h1>
                 <div className="flex items-center gap-3 mb-4">
-                  <img 
-                    src={artistData.artist_image} 
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
+                 {artistData?.artist_image ? (
+                <img 
+                   src={artistData.artist_image} 
+                   className="w-8 h-8 rounded-full object-cover"
+                   alt="Artist"
+                 />
+                 ) : (
+                <div className="w-8 h-8 rounded-full bg-gray-700" />
+                 )}
                   <span className="text-xl text-gray-300">{albumData.album_artist}</span>
                 </div>
               </div>
