@@ -6,7 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
 from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer,PlaylistSerializer
-from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,PurchaseSerializer,UserFullSerializer
+from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,PurchaseSerializer,UserFullSerializer,ReviewSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .queries import getAlbumArtists
 from rest_framework.permissions import AllowAny
@@ -858,7 +858,7 @@ class ObtainFullUsers(ListAPIView):
     def get_queryset(self):
         try:
             query = """
-                    select user_name,user_title,created_at,status,user_id from users
+                    select user_name,user_title,created_at,status,user_id from users where user_id not like '22%'
                     """
             connection,cursor = connect()
             cursor.execute(query)
@@ -986,10 +986,145 @@ def setPrice(request):
         disconnect(cursor,connection)
 
 
+class CreateReview(CreateAPIView):
+    serializer_class = ReviewSerializer
+
+    def perform_create(self, serializer):
+         data = serializer.validated_data
+         stars = data.get('stars')
+         album_name = data.get('album_name')
+         content = data.get('content')
+         user_id = data.get('user_id')
+
+         try:
+             connection,cursor = connect()
+             query = 'select album_id from albums where album_name = :album_name'
+             cursor.execute(query,{'album_name' : album_name})
+
+             album_id = cursor.fetchone()[0]
+
+             query = 'select content_seq.NEXTVAL from dual'
+             cursor.execute(query)
+             content_id = cursor.fetchone()[0]
+
+             query = 'insert into text_content values(:content_id,:content)'
+
+             cursor.execute(query,{
+                 'content_id' : content_id,
+                 'content' : content
+             })
+             connection.commit()
+
+             query = """
+                         insert into ratings values (rating_seq.NEXTVAL,:stars,:content_id,:user_id,:album_id,'A',SYSDATE,0)
+                     """
+             
+             cursor.execute(query,{
+                 'stars' : stars,
+                 'content_id' : content_id,
+                 'user_id' : user_id,
+                 'album_id' : album_id 
+             })
+
+             connection.commit()
+
+         except Exception as e:
+             print(e)
+             connection.rollback()
+             disconnect(cursor,connection)
+             return Response({'error': str(e)}, status=500)
+         
+
+         disconnect(cursor,connection)
+         return Response( {"message": "User created successfully."},status=status.HTTP_201_CREATED)
+    
+
+def readLOB(lob):
+     if hasattr(lob, 'read'):
+        content = lob.read()
+        return content
+     return lob
+     
+
+@csrf_exempt
+def get_ratings(request,album_name):
+    data = []
+    try:
+        connection,cursor = connect()
+        query = """
+                 SELECT R.rating_id,U.user_name,U.user_image,C.text,R.vote_count,R.stars 
+                 FROM ratings R 
+                 JOIN users U ON (R.user_id = U.user_id)
+                 JOIN text_content C ON (C.content_id = R.content_id)
+                 WHERE R.music_id = (SELECT album_id FROM albums WHERE album_name = :album_name)
+                 order by R.vote_count desc
+                """
+        
+        cursor.execute(query,{'album_name':album_name})
+
+        res = cursor.fetchall()
+
+        data = [{
+            'id': rating[0],
+           'user': rating[1],
+           'userPic': rating[2],
+           'content': readLOB(rating[3]),
+           'upvotes': rating[4],
+           'rating': rating[5]
+        }
+
+        for rating in res]
+
+    except Exception as e:
+        print(e)
+
+    disconnect(cursor,connection)
+
+    return JsonResponse(data,safe=False)
+
+
+
+@csrf_exempt
+def upvote(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        rating_id = data.get('rating_id')
+        user_id = data.get('user_id')
+        count = data.get('count')
+        connection,cursor = connect()
+        try:
+            query = "update ratings set vote_count = vote_count+:count where rating_id = :rating_id"
+            cursor.execute(query,{'rating_id':rating_id,'count':count})
+            connection.commit()
+
+            query = 'insert into upvotes values(:rating_id,:user_id)'
+            cursor.execute(query,{'rating_id':rating_id,'user_id':user_id})
+            connection.commit()
+            
+        except Exception as e:
+            connection.rollback()
+            print(e)
+
+        disconnect(cursor,connection)
+        return JsonResponse({'message': 'upvoted'})
+    else:
+            print('eee')
+            return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
     
 
 
 
+    
+
+
+    
+
+
+
+
+        
+
+        
 
         
 

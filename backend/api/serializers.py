@@ -73,6 +73,12 @@ class UserFullSerializer(serializers.Serializer):
     join_date = serializers.CharField()
     user_status = serializers.CharField()
 
+class ReviewSerializer(serializers.Serializer):
+    stars = serializers.IntegerField()
+    album_name = serializers.CharField()
+    content = serializers.CharField()
+    user_id = serializers.IntegerField()
+
 
 
 
