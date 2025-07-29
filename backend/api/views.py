@@ -558,10 +558,11 @@ class AlbumPrices(ListAPIView):
 
     def get_queryset(self):
         query = """
-                  SELECT A.album_name,A.album_image,p1.amount buy,p2.amount rent FROM Albums A
+                  SELECT distinct A.album_name,A.album_image,p1.amount buy,p2.amount rent FROM Albums A
                   JOIN Prices p1 ON (P1.ALBUM_ID = A.album_id)
                   JOIN prices p2 ON (p2.album_id = A.album_id)
                   WHERE p1.TYPE = 'PRCS' AND p2.TYPE= 'SUBS'
+                  and A.album_id != 144
                 """
         try:
             connection,cursor = connect()
@@ -701,7 +702,7 @@ class Subscribe(CreateAPIView):
         
             query = """
                        INSERT INTO SUBSCRIPTION VALUES(SUBSCRIPTION_SEQ.NEXTVAL,(SELECT ALBUM_ID FROM ALBUMS WHERE
-                       ALBUM_NAME = :album_name),:trans_id,SYSDATE,ADD_MONTHS(SYSDATE,1),SYSDATE,:user_id)
+                       ALBUM_NAME = :album_name fetch first 1 rows only),:trans_id,SYSDATE,ADD_MONTHS(SYSDATE,1),SYSDATE,:user_id)
                     """
             try:
                 cursor.execute(query,{
@@ -784,7 +785,7 @@ class Purchase(CreateAPIView):
 
             query = """
                        INSERT INTO PURCHASES VALUES(PURCHASES_SEQ.NEXTVAL,(SELECT ALBUM_ID FROM ALBUMS WHERE
-                       ALBUM_NAME = :album_name),:trans_id,SYSDATE,:user_id)
+                       ALBUM_NAME = :album_name fetch first 1 rows only),:trans_id,SYSDATE,:user_id)
                     """
             try:
                 cursor.execute(query,{
@@ -1110,6 +1111,107 @@ def upvote(request):
     else:
             print('eee')
             return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+    
+
+@csrf_exempt
+def singlestats(request):
+    try:
+        connection,cursor = connect()
+        cursor.execute('select count(*) from albums')
+        album_count = cursor.fetchone()[0]
+        cursor.execute('select count(*) from ratings')
+        rating_count = cursor.fetchone()[0]
+        cursor.execute('''select count(*) from users where user_id not like '22%' ''')
+        user_count = cursor.fetchone()[0]
+
+        data = {
+            'album_count':album_count,
+            'rating_count':rating_count,
+            'user_count':user_count
+        }
+
+        disconnect(cursor,connection)
+        return JsonResponse(data,safe=False)
+    except Exception as e:
+        print(e)
+
+@csrf_exempt
+def groupstats(request):
+    try:
+        connection,cursor = connect()
+        data=[]
+        query = """
+                SELECT album_id,album_name,album_image,
+                (SELECT count(*) FROM ratings WHERE music_id = A.album_id) review_count FROM albums A
+                ORDER BY (SELECT count(*) FROM ratings WHERE music_id = A.album_id) DESC
+                FETCH FIRST 4 ROWS ONLY
+                """
+        cursor.execute(query)
+        res = cursor.fetchall()
+
+        r_order = [
+            {
+                'album_id' : r[0],
+                'album_name' : r[1],
+                'album_image' : r[2],
+                'count' : r[3]
+            }
+            for r in res
+        ]
+
+        data.append(r_order)
+
+        query = """ SELECT A.album_id,A.album_name,A.album_image,count(*) pl_count FROM PLAYLIST_SONG ps
+                    JOIN songs S ON  (S.song_id = ps.song_id)
+                    JOIN albums A ON (S.album_id = A.album_id)
+                    GROUP BY A.album_id,A.album_name,A.album_image
+                    ORDER BY count(*) DESC
+                    FETCH FIRST 4 ROWS ONLY """
+        
+        cursor.execute(query)
+        res = cursor.fetchall()
+
+        pl_order = [
+            {
+                'album_id' : r[0],
+                'album_name' : r[1],
+                'album_image' : r[2],
+                'count' : r[3]
+            }
+            for r in res
+        ]
+
+        data.append(pl_order)
+
+        query = """
+                SELECT album_id,album_name,album_image,(SELECT Round(NVL(avg(stars),0),2) FROM ratings WHERE music_id = A.album_id) star
+                FROM Albums A
+                ORDER BY (SELECT NVL(avg(stars),0) FROM ratings WHERE music_id = A.album_id) DESC
+                FETCH FIRST 4 ROWS ONLY
+                """
+        
+        cursor.execute(query)
+        res = cursor.fetchall()
+
+        star_order = [
+            {
+                'album_id' : r[0],
+                'album_name' : r[1],
+                'album_image' : r[2],
+                'star' : r[3]
+            }
+            for r in res
+        ]
+
+        data.append(star_order)
+
+        disconnect(cursor,connection)
+
+        return JsonResponse(data,safe=False)
+
+    except Exception as e:
+        print(e)
+
     
 
 

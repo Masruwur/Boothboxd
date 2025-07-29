@@ -13,6 +13,36 @@ export default function BoothboxdAdmin() {
   const [pricingAlbum, setPricingAlbum] = useState(null);
   const [rentPriceInput, setRentPriceInput] = useState('');
   const [buyPriceInput, setBuyPriceInput] = useState('');
+  const [single,setSingle] = useState({})
+  const [group,setGroup] = useState([])
+
+  useEffect(()=>{
+    const fetchsingle = async ()=>{
+      try{
+        const res = await api.get('stats/single/')
+        setSingle(res.data)
+
+      }catch(err){
+        console.log(err)
+      }
+    }
+    fetchsingle();
+
+  },[])
+
+  useEffect(()=>{
+    const fetchgroup = async ()=>{
+      try{
+        const res = await api.get('stats/group/')
+        setGroup(res.data)
+
+      }catch(err){
+        console.log(err)
+      }
+    }
+    fetchgroup();
+  },[])
+
 
   const sidebarItems = [
     { id: 'users', label: 'Users', icon: Users },
@@ -22,12 +52,7 @@ export default function BoothboxdAdmin() {
     { id: 'add-albums', label: 'Add Albums', icon: Plus }
   ];
 
-  const mockAlbumResults = [
-    { id: 1, name: 'OK Computer', artist: 'Radiohead', year: 1997, cover: 'https://via.placeholder.com/80x80/1a1a1a/666?text=OK' },
-    { id: 2, name: 'The Dark Side of the Moon', artist: 'Pink Floyd', year: 1973, cover: 'https://via.placeholder.com/80x80/1a1a1a/666?text=DSOTM' },
-    { id: 3, name: 'Abbey Road', artist: 'The Beatles', year: 1969, cover: 'https://via.placeholder.com/80x80/1a1a1a/666?text=AR' },
-    { id: 4, name: 'Nevermind', artist: 'Nirvana', year: 1991, cover: 'https://via.placeholder.com/80x80/1a1a1a/666?text=NM' },
-  ];
+  
 
   useEffect(()=>{
     const fetchUsers = async ()=>{
@@ -425,26 +450,104 @@ export default function BoothboxdAdmin() {
     </div>
   );
 
-  const renderPopularity = () => (
-    <div className="space-y-4">
+   const renderPopularity = () => (
+    <div className="space-y-6">
       <div className="flex items-center space-x-2 mb-6">
         <Star className="w-6 h-6 text-green-400" />
-        <h2 className="text-2xl font-bold text-white">Popularity</h2>
+        <h2 className="text-2xl font-bold text-white">Popularity Dashboard</h2>
       </div>
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Top Albums This Month</h3>
-        <div className="space-y-3">
-          {mockAlbumResults.map((album, index) => (
-            <div key={album.id} className="flex items-center space-x-4 p-3 bg-gray-700 rounded-lg">
-              <div className="text-2xl font-bold text-green-400 w-8">#{index + 1}</div>
-              <img src={album.cover} alt={album.name} className="w-12 h-12 rounded-lg" />
-              <div className="flex-1">
-                <div className="font-semibold text-white">{album.name}</div>
-                <div className="text-gray-400">{album.artist}</div>
-              </div>
-              <div className="text-yellow-400">★ 4.{9 - index}</div>
+      
+      {/* Stats Overview */}
+      <div className="grid grid-cols-3 gap-6 mb-8">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-3xl font-bold text-white mb-2">{single && single.album_count}</div>
+              <div className="text-blue-100">Total Albums</div>
             </div>
-          ))}
+            <Music className="w-12 h-12 text-blue-200" />
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-3xl font-bold text-white mb-2">{single && single.rating_count}</div>
+              <div className="text-purple-100">Total Reviews</div>
+            </div>
+            <Star className="w-12 h-12 text-purple-200" />
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-3xl font-bold text-white mb-2">{single && single.user_count}</div>
+              <div className="text-green-100">Total Users</div>
+            </div>
+            <Users className="w-12 h-12 text-green-200" />
+          </div>
+        </div>
+      </div>
+
+      {/* Three Lists Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Most Popular Albums */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <TrendingUp className="w-5 h-5 text-yellow-400" />
+            <h3 className="text-lg font-semibold text-white">Most Popular Albums</h3>
+          </div>
+          <div className="space-y-3">
+            {group[2].map((album, index) => (
+              <div key={album.album_id} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors">
+                <div className="text-lg font-bold text-yellow-400 w-6">#{index + 1}</div>
+                <img src={album.album_image} alt={album.album_name} className="w-12 h-12 rounded-lg object-cover" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white text-sm truncate">{album.album_name}</div>
+                </div>
+                <div className="text-yellow-400 text-sm font-medium">★ {album.star}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Most Reviewed Albums */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Star className="w-5 h-5 text-blue-400" />
+            <h3 className="text-lg font-semibold text-white">Most Reviewed Albums</h3>
+          </div>
+          <div className="space-y-3">
+            {group[0].map((album, index) => (
+              <div key={album.id} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors">
+                <div className="text-lg font-bold text-blue-400 w-6">#{index + 1}</div>
+                <img src={album.album_image} alt={album.album_name} className="w-12 h-12 rounded-lg object-cover" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white text-sm truncate">{album.album_name}</div>
+                </div>
+                <div className="text-blue-400 text-sm font-medium">{album.count.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Most Playlisted Albums */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Music className="w-5 h-5 text-green-400" />
+            <h3 className="text-lg font-semibold text-white">Most Playlisted Albums</h3>
+          </div>
+          <div className="space-y-3">
+            {group[1].map((album, index) => (
+              <div key={album.id} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors">
+                <div className="text-lg font-bold text-green-400 w-6">#{index + 1}</div>
+                <img src={album.album_image} alt={album.album_name} className="w-12 h-12 rounded-lg object-cover" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white text-sm truncate">{album.album_name}</div>
+                </div>
+                <div className="text-green-400 text-sm font-medium">{album.count.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
