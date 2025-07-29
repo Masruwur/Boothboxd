@@ -37,7 +37,8 @@ export default function Home() {
   const [cardForm, setCardForm] = useState({
     method: '',
     last4: '',
-    expiry: ''
+    expiry: '',
+    passkey: '',
   });
   const [prices,setPrices] = useState([])
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
@@ -200,7 +201,13 @@ useEffect(() => {
 
       console.log(cardData)
       
-     await api.post('cards/create/', cardData);  // Adjust API endpoint as needed
+      try{
+         const res = await api.post('cards/create/', cardData); 
+      }catch(error){
+        if(error.response && error.response.status===403) alert('Invalid Passkey')
+        if(error.response && error.response.status===404) alert('No card found')
+      }
+      
       
       // Reset form
       setCardForm({
@@ -420,6 +427,19 @@ useEffect(() => {
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500"
                       placeholder="MM/YY"
                       pattern="[0-9]{2}/[0-9]{2}"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Passkey</label>
+                    <input
+                      type="text"
+                      value={cardForm.passkey || ''}
+                      onChange={(e) => setCardForm({...cardForm, passkey: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500"
+                      placeholder=""
+                      maxLength="4"
+                      pattern="[0-9]{4}"
                       required
                     />
                   </div>

@@ -56,6 +56,7 @@ class CardSerializer(serializers.Serializer):
     expiry = serializers.CharField(max_length=5)
     last4 = serializers.CharField(max_length=4)
     method = serializers.CharField()
+    passkey = serializers.CharField()
     user_id = serializers.IntegerField()
 class CardSerializer2(serializers.Serializer):
     expiry = serializers.CharField(max_length=5)

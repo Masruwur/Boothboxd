@@ -584,34 +584,70 @@ class AlbumPrices(ListAPIView):
             print(e)
             return []
             
-class CreateCard(CreateAPIView):
-    serializer_class = CardSerializer
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseForbidden
+import json
 
-    def perform_create(self, serializer):
-        data = serializer.validated_data
+@csrf_exempt
+def create_card(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
 
-        expiry = data['expiry']
-        last4 = data['last4']
-        method = data['method']
-        user_id = data['user_id']
+    try:
+        data = json.loads(request.body)
 
-        query = 'INSERT INTO CARD_INFO VALUES (CARD_INFO_SEQ.NEXTVAL,:user_id,:method,:last4,:expiry,200)'
+        method = data.get('method')
+        last4 = data.get('last4')
+        expiry = data.get('expiry')
+        passkey = data.get('passkey')
+        user_id = data.get('user_id')
 
-        try:
-            connection,cursor = connect()
-            cursor.execute(query,{
-                'expiry' : expiry,
-                'last4' : last4,
-                'method' : method,
-                'user_id' :user_id
-            })
-            connection.commit()
-            disconnect(cursor,connection)
+        if not all([method, last4, expiry, passkey, user_id]):
+            return JsonResponse({'error': 'Missing required fields'}, status=400)
 
-            return Response( {"message": "Card created successfully."},status=status.HTTP_201_CREATED)
+        connection, cursor = connect()
 
-        except Exception as e:
-            print(e)
+        # 1. Fetch passkey from card_creds
+        cursor.execute(
+            """
+            SELECT passkey FROM card_creds
+            WHERE method_type = :method AND last4 = :last4 AND expiry = :expiry
+            """,
+            {'method': method, 'last4': last4, 'expiry': expiry}
+        )
+        row = cursor.fetchone()
+        if not row:
+            disconnect(cursor, connection)
+            return JsonResponse({'error': 'Card credentials not found'}, status=404)
+
+        db_passkey = row[0]
+
+        # 2. Check passkey match
+        if db_passkey != passkey:
+            disconnect(cursor, connection)
+            return JsonResponse({'error': 'Invalid passkey'}, status=403)
+
+        # 3. Insert into CARD_INFO
+        insert_query = """
+            INSERT INTO CARD_INFO 
+            VALUES (CARD_INFO_SEQ.NEXTVAL, :user_id, :method, :last4, :expiry, ROUND(DBMS_RANDOM.VALUE(100,200),2))
+        """
+
+        cursor.execute(insert_query, {
+            'user_id': user_id,
+            'method': method,
+            'last4': last4,
+            'expiry': expiry
+        })
+        connection.commit()
+        disconnect(cursor, connection)
+
+        return JsonResponse({'message': 'Card created successfully.'}, status=201)
+
+    except Exception as e:
+        print('Error:', e)
+        return JsonResponse({'error': 'Server error'}, status=500)
+
 
 class ObtainCardsView(ListAPIView):
     serializer_class = CardSerializer2

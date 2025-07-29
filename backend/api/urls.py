@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import SignUpView,LoginView,UniqueAlbumObtainView,AlbumSongObtainView,ArtistSongView,ArtistAlbumView,UniqueArtistObtainView,AlbumFilter,UserObtain,AlbumGenreObtain,CreatePlaylist
-from .views import GetUserPlaylists,AddPlaylistSong,ObtainPlaylistsongs,AlbumPrices,CreateCard,ObtainCardsView,Subscribe,Purchase,UserAlbums,ObtainFullUsers,BlockUser,UnblockUser
+from .views import GetUserPlaylists,AddPlaylistSong,ObtainPlaylistsongs,AlbumPrices,create_card,ObtainCardsView,Subscribe,Purchase,UserAlbums,ObtainFullUsers,BlockUser,UnblockUser
 from .views import QueryAlbums,RegisterAlbum,setPrice,CreateReview,get_ratings,upvote,singlestats,groupstats,marketstats
 
 urlpatterns = [
@@ -19,7 +19,7 @@ urlpatterns = [
     path('playlists/add/',view=AddPlaylistSong.as_view()),
     path('playlists/<int:user_id>/<str:playlist_name>/',view=ObtainPlaylistsongs.as_view()),
     path('prices/',view=AlbumPrices.as_view()),
-    path('cards/create/',view=CreateCard.as_view()),
+    path('cards/create/',view=create_card),
     path('cards/<int:user_id>/',view=ObtainCardsView.as_view()),
     path('market/subscribe/',view=Subscribe.as_view()),
     path('market/purchase/',view=Purchase.as_view()),
