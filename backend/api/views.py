@@ -490,7 +490,7 @@ class AddPlaylistSong(CreateAPIView):
         query="""
                 INSERT INTO PLAYLIST_SONG VALUES ((SELECT PL_ID FROM PLAYLISTS WHERE PLAYLIST_NAME = :playlist_name
                 AND USER_ID = :user_id),
-                (SELECT SONG_ID FROM SONGS WHERE SONG_NAME = :song_name))
+                (SELECT SONG_ID FROM SONGS WHERE SONG_NAME = :song_name fetch first 1 rows only))
               """
         try:
             connection,cursor = connect()
@@ -999,7 +999,7 @@ class CreateReview(CreateAPIView):
 
          try:
              connection,cursor = connect()
-             query = 'select album_id from albums where album_name = :album_name'
+             query = 'select album_id from albums where album_name = :album_name fetch first 1 rows only'
              cursor.execute(query,{'album_name' : album_name})
 
              album_id = cursor.fetchone()[0]
@@ -1057,7 +1057,7 @@ def get_ratings(request,album_name):
                  FROM ratings R 
                  JOIN users U ON (R.user_id = U.user_id)
                  JOIN text_content C ON (C.content_id = R.content_id)
-                 WHERE R.music_id = (SELECT album_id FROM albums WHERE album_name = :album_name)
+                 WHERE R.music_id = (SELECT album_id FROM albums WHERE album_name = :album_name fetch first 1 rows only)
                  order by R.vote_count desc
                 """
         
@@ -1212,7 +1212,115 @@ def groupstats(request):
     except Exception as e:
         print(e)
 
-    
+
+@csrf_exempt
+def marketstats(request):
+    connection, cursor = connect()
+
+    try:
+        cursor.execute("""
+            SELECT U.USER_ID, U.user_title, SUM(T.amount) total
+            FROM users U
+            JOIN card_info C ON C.USER_ID = U.USER_ID 
+            JOIN TRANSACTIONS T ON T.info_id = C.info_id
+            WHERE U.user_id NOT LIKE '22%' AND T.status='S'
+            GROUP BY U.USER_ID, U.USER_TITLE
+            ORDER BY (SUM(T.amount)) DESC
+            FETCH FIRST 4 ROWS ONLY
+        """)
+        top_users = [
+            {"user_id":row[0],"user_title": row[1], "total": float(row[2])}
+            for row in cursor.fetchall()
+        ]
+
+        cursor.execute("""
+            SELECT A.album_id, A.album_name, A.album_image 
+            FROM Albums A
+            JOIN PURCHASES P ON P.ALBUM_ID = A.ALBUM_ID 
+            JOIN TRANSACTIONS T ON T.TRANS_ID = P.TRANS_ID 
+            GROUP BY A.album_id, A.album_name, A.album_image
+            ORDER BY SUM(T.amount) DESC
+            FETCH FIRST 4 ROWS ONLY
+        """)
+        top_bought = [
+            {"album_id":row[0],"album_name": row[1], "album_image": row[2]}
+            for row in cursor.fetchall()
+        ]
+
+        cursor.execute("""
+            SELECT A.album_id, A.album_name, A.album_image 
+            FROM Albums A
+            JOIN SUBSCRIPTION S ON S.ALBUM_ID = A.ALBUM_ID 
+            JOIN TRANSACTIONS T ON T.TRANS_ID = S.TRANS_ID 
+            GROUP BY A.album_id, A.album_name, A.album_image
+            ORDER BY (SUM(T.amount)) DESC
+            FETCH FIRST 4 ROWS ONLY
+        """)
+        top_rented = [
+             {"album_id":row[0],"album_name": row[1], "album_image": row[2]}
+             for row in cursor.fetchall()
+        ]
+
+
+        cursor.execute("""
+            SELECT SUM(T.amount) FROM transactions T
+            JOIN PURCHASES P ON P.TRANS_ID = T.TRANS_ID
+        """)
+        total_buy = cursor.fetchone()[0] or 0
+
+        cursor.execute("""
+            SELECT SUM(T.amount) FROM transactions T
+            JOIN SUBSCRIPTION S ON S.TRANS_ID = T.TRANS_ID
+        """)
+        total_rent = cursor.fetchone()[0] or 0
+
+        total_all = total_buy + total_rent
+        revenue_data = [
+            {"name": "Buy", "value": round(total_buy * 100 / total_all) if total_all else 0, "amount": float(total_buy)},
+            {"name": "Rent", "value": round(total_rent * 100 / total_all) if total_all else 0, "amount": float(total_rent)},
+        ]
+
+        cursor.execute("SELECT COUNT(*) FROM TRANSACTIONS T WHERE T.STATUS = 'S'")
+        success = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM TRANSACTIONS T WHERE T.STATUS = 'F'")
+        failure = cursor.fetchone()[0]
+
+        transaction_status = [
+            {"name": "Successful", "value": round(success * 100 / (success + failure)) if (success + failure) else 0, "count": success},
+            {"name": "Failed", "value": round(failure * 100 / (success + failure)) if (success + failure) else 0, "count": failure},
+        ]
+
+        # 6. Transaction Heatmap
+        cursor.execute("""
+            SELECT TO_CHAR(created_at, 'HH24'), SUM(amount)
+            FROM transactions
+            GROUP BY TO_CHAR(created_at, 'HH24')
+            ORDER BY TO_CHAR(created_at, 'HH24')
+            fetch first 12 rows only
+        """)
+        heatmap = [
+            {"hour": int(row[0]), "amount": float(row[1])}
+            for row in cursor.fetchall()
+        ]
+
+
+
+        # Combine everything
+        data = {
+            "topUsers": top_users,
+            "topBoughtAlbums": top_bought,
+            "topRentedAlbums": top_rented,
+            "revenueData": revenue_data,
+            "transactionHeatmap": heatmap,
+            "transactionStatus": transaction_status
+        }
+
+        return JsonResponse(data,safe=False)
+
+    finally:
+        disconnect(cursor, connection)
+
 
 
 

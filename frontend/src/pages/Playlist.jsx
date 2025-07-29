@@ -65,19 +65,7 @@ export default function PlaylistPage() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-3">
-            <button className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-full font-semibold flex items-center gap-2 transition-colors">
-              <Play size={16} />
-              Play
-            </button>
-            <button className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full transition-colors">
-              <Heart size={16} />
-            </button>
-            <button className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full transition-colors">
-              <Share2 size={16} />
-            </button>
-            <button className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full transition-colors">
-              <MoreHorizontal size={16} />
-            </button>
+           
           </div>
         </div>
       </div>

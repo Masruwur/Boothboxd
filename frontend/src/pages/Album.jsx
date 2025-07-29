@@ -272,16 +272,6 @@ const AlbumPage = () => {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => toggleSongLike(song.id)}
-                        className={`p-2 rounded-full transition-colors ${
-                          likedSongs.has(song.id)
-                            ? 'text-green-500 hover:text-green-400'
-                            : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <Heart className={`w-4 h-4 ${likedSongs.has(song.id) ? 'fill-current' : ''}`} />
-                      </button>
                       <button className="p-2 rounded-full text-gray-400 hover:text-white transition-colors" onClick={() => songAddClick(song)}>
                         <Plus className="w-4 h-4" />
                       </button>

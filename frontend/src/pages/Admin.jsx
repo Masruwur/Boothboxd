@@ -1,5 +1,5 @@
 import React, { useState,useEffect } from 'react';
-import { Users, TrendingUp, Star, Plus, LogOut, Search, User, Calendar, Shield, Music, DollarSign } from 'lucide-react';
+import { Users, TrendingUp, Star, Plus, LogOut, Search, User, Calendar, Shield, Music, DollarSign,PieChart,BarChart3 } from 'lucide-react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,6 +15,9 @@ export default function BoothboxdAdmin() {
   const [buyPriceInput, setBuyPriceInput] = useState('');
   const [single,setSingle] = useState({})
   const [group,setGroup] = useState([])
+  const [marketData,setMarketData] = useState({})
+
+  
 
   useEffect(()=>{
     const fetchsingle = async ()=>{
@@ -81,6 +84,23 @@ export default function BoothboxdAdmin() {
       fetchAlbums();
     }
   },[activeTab])
+
+  useEffect(()=>{
+    const fetchMarket = async ()=>{
+        try{
+            const res = await api.get('stats/market/')
+            setMarketData(res.data)
+        }
+        catch(e){
+            console.log(e)
+        }
+    }
+    if(activeTab === 'market-stats') {
+      fetchMarket();
+    }
+  },[activeTab])
+
+
 
   const handleAlbumSearch = async (query) => {
     setAlbumSearch(query);
@@ -427,29 +447,177 @@ export default function BoothboxdAdmin() {
     </div>
   );
 
-  const renderMarketStats = () => (
-    <div className="space-y-4">
+  const renderMarketStats = () => {
+  // Simple color generator for heatmap
+  const getHeatmapColor = (amount, max) => {
+    const intensity = amount / max;
+    if (intensity > 0.8) return 'bg-red-500';
+    if (intensity > 0.6) return 'bg-orange-500';
+    if (intensity > 0.4) return 'bg-yellow-500';
+    if (intensity > 0.2) return 'bg-green-500';
+    return 'bg-blue-500';
+  };
+
+  const maxTransaction = marketData?.transactionHeatmap?.length
+  ? Math.max(...marketData.transactionHeatmap.map(t => t.amount))
+  : 0;
+
+
+  return (
+    <div className="space-y-6">
       <div className="flex items-center space-x-2 mb-6">
         <TrendingUp className="w-6 h-6 text-green-400" />
         <h2 className="text-2xl font-bold text-white">Market Stats</h2>
       </div>
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <div className="text-3xl font-bold text-green-400 mb-2">12,847</div>
-          <div className="text-gray-400">Total Albums</div>
+
+
+      {/* Top Users */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex items-center space-x-2 mb-4">
+          <User className="w-5 h-5 text-yellow-400" />
+          <h3 className="text-xl font-semibold text-white">Top Users by Spending</h3>
         </div>
-        <div className="bg-gray-800 rounded-lg p-6">
-          <div className="text-3xl font-bold text-blue-400 mb-2">3,291</div>
-          <div className="text-gray-400">Active Users</div>
+        <div className="grid grid-cols-2 gap-4">
+          {marketData.topUsers && marketData.topUsers.map((user) => (
+            <div key={user.user_id} className="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
+              <span className="text-white font-medium">{user.user_title}</span>
+              <span className="text-green-400 font-bold">${user.total.toFixed(2)}</span>
+            </div>
+          ))}
         </div>
+      </div>
+
+      {/* Top Albums Row */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Top Rented Albums */}
         <div className="bg-gray-800 rounded-lg p-6">
-          <div className="text-3xl font-bold text-purple-400 mb-2">89,432</div>
-          <div className="text-gray-400">Total Reviews</div>
+          <div className="flex items-center space-x-2 mb-4">
+            <Music className="w-5 h-5 text-blue-400" />
+            <h3 className="text-xl font-semibold text-white">Top Rented Albums</h3>
+          </div>
+          <div className="space-y-3">
+            {marketData.topRentedAlbums && marketData.topRentedAlbums.map((album) => (
+              <div key={album.album_id} className="flex items-center space-x-3 p-2 bg-gray-700 rounded-lg">
+                <img
+                  src={album.album_image}
+                  alt={album.album_name}
+                  className="w-16 h-16 object-cover rounded-md"
+                />
+
+                <div>
+                  <div className="text-white font-medium">{album.album_name}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Bought Albums */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <DollarSign className="w-5 h-5 text-green-400" />
+            <h3 className="text-xl font-semibold text-white">Top Bought Albums</h3>
+          </div>
+          <div className="space-y-3">
+            {marketData.topBoughtAlbums && marketData.topBoughtAlbums.map((album) => (
+              <div key={album.album_id} className="flex items-center space-x-3 p-2 bg-gray-700 rounded-lg">
+                <img
+                    src={album.album_image}
+                    alt={album.album_name}
+                    className="w-16 h-16 object-cover rounded-md"
+                  />
+                <div>
+                  <div className="text-white font-medium">{album.album_name}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Buy vs Rent Revenue Pie Chart */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <PieChart className="w-5 h-5 text-purple-400" />
+            <h3 className="text-xl font-semibold text-white">Buy vs Rent Revenue</h3>
+          </div>
+          <div className="flex items-center justify-center space-x-8">
+            {marketData.revenueData && marketData.revenueData.map((item, index) => (
+              <div key={index} className="text-center">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                  item.name === 'Buy' ? 'bg-green-500' : 'bg-blue-500'
+                }`}>
+                  {item.value}%
+                </div>
+                <div className="mt-2 text-white font-medium">{item.name}</div>
+                <div className="text-gray-400 text-sm">${item.amount.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Transaction Status Pie Chart */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-red-400" />
+            <h3 className="text-xl font-semibold text-white">Transaction Status</h3>
+          </div>
+          <div className="flex items-center justify-center space-x-8">
+            {marketData.transactionStatus && marketData.transactionStatus.map((item, index) => (
+              <div key={index} className="text-center">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                  item.name === 'Successful' ? 'bg-green-500' : 'bg-red-500'
+                }`}>
+                  {item.value}%
+                </div>
+                <div className="mt-2 text-white font-medium">{item.name}</div>
+                <div className="text-gray-400 text-sm">{item.count.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction Heatmap */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex items-center space-x-2 mb-4">
+          <BarChart3 className="w-5 h-5 text-orange-400" />
+          <h3 className="text-xl font-semibold text-white">Daily Transaction Activity</h3>
+        </div>
+        <div className="grid grid-cols-12 gap-2">
+          {marketData.transactionHeatmap && marketData.transactionHeatmap.map((transaction, index) => (
+            <div key={index} className="text-center">
+              <div
+                className={`h-16 w-full rounded-lg flex items-center justify-center text-white text-xs font-bold ${
+                  getHeatmapColor(transaction.amount, maxTransaction)
+                }`}
+                title={`${transaction.hour}:00 - $${transaction.amount}`}
+              >
+                ${Math.round(transaction.amount)}
+              </div>
+              <div className="text-gray-400 text-xs mt-1">{transaction.hour}:00</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between items-center mt-4 text-xs text-gray-400">
+          <span>Less Activity</span>
+          <div className="flex space-x-1">
+            <div className="w-3 h-3 bg-blue-500 rounded"></div>
+            <div className="w-3 h-3 bg-green-500 rounded"></div>
+            <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+            <div className="w-3 h-3 bg-orange-500 rounded"></div>
+            <div className="w-3 h-3 bg-red-500 rounded"></div>
+          </div>
+          <span>More Activity</span>
         </div>
       </div>
     </div>
   );
+};
 
+  
    const renderPopularity = () => (
     <div className="space-y-6">
       <div className="flex items-center space-x-2 mb-6">

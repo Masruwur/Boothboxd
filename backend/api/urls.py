@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import SignUpView,LoginView,UniqueAlbumObtainView,AlbumSongObtainView,ArtistSongView,ArtistAlbumView,UniqueArtistObtainView,AlbumFilter,UserObtain,AlbumGenreObtain,CreatePlaylist
 from .views import GetUserPlaylists,AddPlaylistSong,ObtainPlaylistsongs,AlbumPrices,CreateCard,ObtainCardsView,Subscribe,Purchase,UserAlbums,ObtainFullUsers,BlockUser,UnblockUser
-from .views import QueryAlbums,RegisterAlbum,setPrice,CreateReview,get_ratings,upvote,singlestats,groupstats
+from .views import QueryAlbums,RegisterAlbum,setPrice,CreateReview,get_ratings,upvote,singlestats,groupstats,marketstats
 
 urlpatterns = [
     path('signup/',view=SignUpView.as_view(),name='signup'),
@@ -35,4 +35,5 @@ urlpatterns = [
     path('reviews/upvote/',view=upvote),
     path('stats/single/',view=singlestats),
     path('stats/group/',view=groupstats),
+    path('stats/market/',view=marketstats),
 ]
