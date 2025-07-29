@@ -197,8 +197,10 @@ useEffect(() => {
         ...cardForm,
         user_id: user_id
       };
+
+      console.log(cardData)
       
-      const res = await api.post('cards/create/', cardData);  // Adjust API endpoint as needed
+     await api.post('cards/create/', cardData);  // Adjust API endpoint as needed
       
       // Reset form
       setCardForm({

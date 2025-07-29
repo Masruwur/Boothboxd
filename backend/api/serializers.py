@@ -57,7 +57,12 @@ class CardSerializer(serializers.Serializer):
     last4 = serializers.CharField(max_length=4)
     method = serializers.CharField()
     user_id = serializers.IntegerField()
-    balance = serializers.DecimalField(max_digits=8,decimal_places=2)
+class CardSerializer2(serializers.Serializer):
+    expiry = serializers.CharField(max_length=5)
+    last4 = serializers.CharField(max_length=4)
+    method = serializers.CharField()
+    user_id = serializers.IntegerField()
+    balance = serializers.DecimalField(max_digits=100,decimal_places=2)
 class PurchaseSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=8,decimal_places=2)
     album_name = serializers.CharField()

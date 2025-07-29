@@ -6,7 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .connection import connect,disconnect
 from rest_framework import status
 from .serializers import SignUpSerializer,LoginSerializer,AlbumSerializer,SongSerializer,ArtistSerializer,UserSerializer,GenreSerializer,PlaylistSerializer
-from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,PurchaseSerializer,UserFullSerializer,ReviewSerializer
+from .serializers import PlaylistDataSerializer,PlayListSongSerializer,AlbumPricesSerializer,CardSerializer,CardSerializer2,PurchaseSerializer,UserFullSerializer,ReviewSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .queries import getAlbumArtists
 from rest_framework.permissions import AllowAny
@@ -52,8 +52,8 @@ class SignUpView(CreateAPIView):
                     return Response({'error': 'User title already exists'}, status=409)
 
                 # Insert user
-                query = """ INSERT INTO users (user_id, user_name, user_title, password, created_at, user_image)
-                            VALUES (user_seq.NEXTVAL,:user_name,:user_title,:user_pass,SYSDATE,:image_path)"""
+                query = """ INSERT INTO users (user_id, user_name, user_title, password, created_at, user_image,status)
+                            VALUES (user_seq.NEXTVAL,:user_name,:user_title,:user_pass,SYSDATE,:image_path,'S')"""
                 cursor.execute(query,
                     {
                         'user_name' : user_name,
@@ -614,7 +614,7 @@ class CreateCard(CreateAPIView):
             print(e)
 
 class ObtainCardsView(ListAPIView):
-    serializer_class = CardSerializer
+    serializer_class = CardSerializer2
 
     def get_queryset(self):
         user_id = self.kwargs.get('user_id')
