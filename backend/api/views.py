@@ -17,6 +17,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from .queries import search_albums,reg_album_by_id
 from decimal import Decimal
 import json
+from datetime import datetime, timezone
+from dateutil.relativedelta import relativedelta
 
 
 
@@ -1429,6 +1431,272 @@ def user_summary(request, user_id):
         return JsonResponse({'error': 'Internal server error'}, status=500)
     finally:
         disconnect(cursor,connection)
+
+
+
+
+def time_ago(dt):
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    
+    now = datetime.now(timezone.utc)
+    delta = relativedelta(now, dt)
+    if delta.years > 0:
+        return f"{delta.years}y ago"
+    if delta.months > 0:
+        return f"{delta.months}mo ago"
+    if delta.days > 0:
+        return f"{delta.days}d ago"
+    if delta.hours > 0:
+        return f"{delta.hours}h ago"
+    if delta.minutes > 0:
+        return f"{delta.minutes}m ago"
+    return "just now"
+
+@csrf_exempt
+def get_posts(request,user_id):
+    connection,cursor = connect()
+        # Fetch posts with user data and like count
+    cursor.execute("""
+        SELECT 
+            p.post_id,
+            u.user_name,
+            u.user_image,
+            tc.text,
+            (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.post_id) AS like_count,
+            CASE 
+            WHEN EXISTS (
+                SELECT 1 FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :user_id
+            ) THEN 1
+            ELSE 0
+            END AS liked,
+            p.created_at
+        FROM posts p
+        JOIN users u ON p.user_id = u.user_id
+        JOIN text_content tc ON p.content_id = tc.content_id
+        ORDER BY p.created_at DESC
+    """,{'user_id':user_id})
+    post_rows = cursor.fetchall()
+
+    posts = []
+    for row in post_rows:
+        post_id, user_name, user_image, text, like_count, liked, created_at = row
+        text = readLOB(text)
+        
+        # Fetch comments for this post
+        cursor.execute("""
+            SELECT 
+                c.comment_id,
+                u.user_name,
+                u.user_image,
+                tc.text,
+                c.created_at
+            FROM comments c
+            JOIN users u ON c.user_id = u.user_id
+            JOIN text_content tc ON c.content_id = tc.content_id
+            WHERE c.post_id = :post_id AND c.parent_id IS NULL
+            ORDER BY c.created_at ASC
+        """, {'post_id':post_id})
+        
+        comment_rows = cursor.fetchall()
+        comments = []
+        for c_row in comment_rows:
+            comment_id, c_user_name, c_user_image, c_text, c_created_at = c_row
+            c_text = readLOB(c_text)
+            comments.append({
+                "id": comment_id,
+                "user_name": c_user_name,
+                "user_image": c_user_image,
+                "text": c_text,
+                "timestamp": time_ago(c_created_at)
+            })
+
+        posts.append({
+            "id": post_id,
+            "user_name": user_name,
+            "user_image": user_image,
+            "text": text,
+            "likes": like_count,
+            "liked": bool(liked),
+            "timestamp": time_ago(created_at),
+            "comments": comments
+        })
+
+    return JsonResponse(posts, safe=False)
+
+
+@csrf_exempt
+def create_post(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        user_id = body.get('user_id')
+        text = body.get('text')
+
+        if not user_id or not text:
+            return JsonResponse({'error': 'Missing user_id or text'}, status=400)
+
+        connection, cursor = connect()
+
+        # 1. Get next content_id from sequence
+        cursor.execute("SELECT content_seq.NEXTVAL FROM dual")
+        content_id = cursor.fetchone()[0]
+
+        # 2. Insert into text_content
+        cursor.execute("""
+            INSERT INTO text_content (content_id, text)
+            VALUES (:content_id, :text)
+        """, {'content_id': content_id, 'text': text})
+
+        # 3. Get next post_id from sequence
+        cursor.execute("SELECT post_seq.NEXTVAL FROM dual")
+        post_id = cursor.fetchone()[0]
+
+        # 4. Insert into posts
+        cursor.execute("""
+            INSERT INTO posts (post_id, user_id, content_id, created_at)
+            VALUES (:post_id, :user_id, :content_id, SYSDATE)
+        """, {
+            'post_id': post_id,
+            'user_id': user_id,
+            'content_id': content_id
+        })
+
+        connection.commit()
+        return JsonResponse({'message': 'Post created successfully', 'post_id': post_id}, status=201)
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def create_like(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        user_id = data.get('user_id')
+        post_id = data.get('post_id')
+
+        if not all([user_id, post_id]):
+            return JsonResponse({'error': 'Missing user_id or post_id'}, status=400)
+
+        connection, cursor = connect()
+
+        # Insert like - may fail if duplicate, so handle unique constraint error
+        try:
+            cursor.execute("""
+                INSERT INTO likes (post_id, user_id, created_at)
+                VALUES (:post_id, :user_id, :created_at)
+            """, {
+                'post_id': post_id,
+                'user_id': user_id,
+                'created_at': datetime.now()
+            })
+            connection.commit()
+            return JsonResponse({'message': 'Like registered'}, status=201)
+        except Exception as e:
+            # Could be duplicate key error - user already liked post
+            return JsonResponse({'error': 'Like already exists or error: ' + str(e)}, status=400)
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+@csrf_exempt
+def create_comment(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        user_id = data.get('user_id')
+        post_id = data.get('post_id')
+        text = data.get('text')
+
+        if not all([user_id, post_id, text]):
+            return JsonResponse({'error': 'Missing user_id, post_id or text'}, status=400)
+
+        connection, cursor = connect()
+
+        # Get next content_id
+        cursor.execute("SELECT content_seq.NEXTVAL FROM dual")
+        content_id = cursor.fetchone()[0]
+
+        # Insert into text_content
+        cursor.execute("""
+            INSERT INTO text_content (content_id, text)
+            VALUES (:content_id, :text)
+        """, {'content_id': content_id, 'text': text})
+
+        # Get next comment_id
+        cursor.execute("SELECT comment_seq.NEXTVAL FROM dual")
+        comment_id = cursor.fetchone()[0]
+
+        # Insert into comments with like_count and parent_id NULL
+        cursor.execute("""
+            INSERT INTO comments (comment_id, user_id, content_id, created_at, post_id, parent_id, like_count)
+            VALUES (:comment_id, :user_id, :content_id, :created_at, :post_id, NULL, NULL)
+        """, {
+            'comment_id': comment_id,
+            'user_id': user_id,
+            'content_id': content_id,
+            'created_at': datetime.now(),
+            'post_id': post_id
+        })
+
+        connection.commit()
+        return JsonResponse({'message': 'Comment created', 'comment_id': comment_id}, status=201)
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+@csrf_exempt
+def remove_like(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        user_id = data.get('user_id')
+        post_id = data.get('post_id')
+
+        if not all([user_id, post_id]):
+            return JsonResponse({'error': 'Missing user_id or post_id'}, status=400)
+
+        connection, cursor = connect()
+
+        cursor.execute("""
+            DELETE FROM likes WHERE post_id = :post_id AND user_id = :user_id
+        """, {
+            'post_id': post_id,
+            'user_id': user_id
+        })
+
+        if cursor.rowcount == 0:
+            # No like was found to delete
+            return JsonResponse({'error': 'Like not found'}, status=404)
+
+        connection.commit()
+        return JsonResponse({'message': 'Like removed'}, status=200)
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 
 
 

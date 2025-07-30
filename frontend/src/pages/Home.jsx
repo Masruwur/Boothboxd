@@ -47,6 +47,7 @@ export default function Home() {
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
   const [popData,setpopData] = useState(null)
   const [userAlbums, setUserAlbums] = useState([]);
+  const [rposts,setRposts] = useState([])
 
 
   const navigationItems = [
@@ -151,6 +152,22 @@ useEffect(() => {
     fetchUserAlbums();
 }, [activeSection]);
 
+useEffect(()=>{
+   const fetchposts = async () =>{
+     const token = localStorage.getItem(ACCESS_TOKEN);
+     const user_id = jwtDecode(token).user_id;
+
+     try{
+       const res = await api.get(`posts/${user_id}/`)
+       console.log(res.data)
+       setRposts(res.data)
+     }catch(err){
+      console.log(err)
+     }
+   }
+   fetchposts();
+},[activeSection])
+
 
   const handlePlaylistClick = (playlist_name) =>{
      navigate(`/playlists/${playlist_name}`)
@@ -232,7 +249,130 @@ useEffect(() => {
     navigate('/user'); 
   };
 
-  
+
+  const [newPost, setNewPost] = useState('');
+  const [showComments, setShowComments] = useState({});
+  const [newComment, setNewComment] = useState({});
+
+  const handlePostSubmit = async () => {
+    if (newPost.trim()) {
+      const token = localStorage.getItem(ACCESS_TOKEN)
+      const user_id = jwtDecode(token).user_id
+
+      const data = {
+        user_id: user_id,
+        text: newPost
+      }
+
+      await api.post('posts/create/',data)
+      const fetchposts = async () =>{
+      const token = localStorage.getItem(ACCESS_TOKEN);
+      const user_id = jwtDecode(token).user_id;
+
+      try{
+        const res = await api.get(`posts/${user_id}/`)
+        console.log(res.data)
+        setRposts(res.data)
+      }catch(err){
+        console.log(err)
+      }
+    }
+      fetchposts();
+
+    }
+  };
+
+ const toggleLike = async (postId) => {
+  const token = localStorage.getItem(ACCESS_TOKEN);
+  const user_id = jwtDecode(token).user_id;
+
+  // Find the post to toggle
+  const post = rposts.find(post => post.id === postId);
+  if (!post) return;
+
+  if (!post.liked) {
+    // Call API to create like
+    try {
+       await api.post('likes/create/', {
+        user_id: user_id,
+        post_id: postId
+       });
+
+      // Update state after successful API call
+      setRposts(rposts.map(p => 
+        p.id === postId
+          ? { ...p, liked: true, likes: p.likes + 1 }
+          : p
+      ));
+    } catch (error) {
+      console.error("Failed to like post:", error);
+    }
+  } else {
+    setRposts(rposts.map(p => 
+      p.id === postId
+        ? { ...p, liked: false, likes: p.likes - 1 }
+        : p
+    ));
+
+    await api.post('likes/remove/', {
+        user_id: user_id,
+        post_id: postId
+    });
+  }
+};
+
+
+  const toggleComments = (postId) => {
+    setShowComments(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+  };
+
+  const handleCommentSubmit = (postId) => {
+    const commentText = newComment[postId];
+    if (commentText && commentText.trim()) {
+      const comment = {
+        id: Date.now(),
+        user_name: "You",
+        user_image: `http://127.0.0.1:8000${user.user_image}`,
+        text: commentText,
+        timestamp: "now"
+      };
+      
+      setRposts(rposts.map(post => 
+        post.id === postId 
+          ? { ...post, comments: [...post.comments, comment] }
+          : post
+      ));
+      
+      setNewComment(prev => ({ ...prev, [postId]: '' }));
+
+      const token = localStorage.getItem(ACCESS_TOKEN);
+      const user_id = jwtDecode(token).user_id;
+
+      const data = {
+        user_id : user_id,
+        post_id : postId,
+        text: commentText
+      }
+      api.post('comments/create/',data)
+
+        const fetchposts = async () =>{
+      const token = localStorage.getItem(ACCESS_TOKEN);
+      const user_id = jwtDecode(token).user_id;
+
+      try{
+        const res = await api.get(`posts/${user_id}/`)
+        console.log(res.data)
+        setRposts(res.data)
+      }catch(err){
+        console.log(err)
+      }
+    }
+      fetchposts();
+    }
+  };
 
 
   const renderContent = () => {
@@ -298,31 +438,147 @@ useEffect(() => {
           </div>
         );
       case 'posts':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-white">Posts</h2>
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
-                      <span className="text-white font-semibold">U</span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-white font-medium">User {i}</h3>
-                      <p className="text-gray-300 mt-2">This is a sample post content that would appear in the posts section...</p>
-                      <div className="flex items-center space-x-4 mt-3 text-sm text-gray-400">
-                        <span>2h ago</span>
-                        <span>•</span>
-                        <span>5 likes</span>
-                      </div>
+         return (
+    <div className="min-h-screen bg-gray-900 py-8">
+      <div className="max-w-2xl mx-auto space-y-6 p-4">
+        <h2 className="text-3xl font-bold text-white">Posts</h2>
+        
+        {/* New Post Input */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div className="flex items-start space-x-3">
+            <img 
+              src={`http://127.0.0.1:8000${user.user_image}`} 
+              alt="Your avatar" 
+              className="w-10 h-10 rounded-full object-cover"
+            />
+            <div className="flex-1">
+              <textarea
+                value={newPost}
+                onChange={(e) => setNewPost(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.ctrlKey) {
+                    handlePostSubmit();
+                  }
+                }}
+                placeholder="Share your thoughts about a film..."
+                className="w-full bg-gray-700 text-white rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-400"
+                rows="3"
+              />
+              <div className="flex justify-end mt-3">
+                <button
+                  onClick={handlePostSubmit}
+                  disabled={!newPost.trim()}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <Send size={16} />
+                  <span>Post</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Posts Feed */}
+        <div className="space-y-4">
+          {rposts.map((post) => (
+            <div key={post.id} className="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors border border-gray-700">
+              <div className="flex items-start space-x-3">
+                <img 
+                  src= {`http://127.0.0.1:8000${post.user_image}`}
+                  alt={`${post.user_name}'s avatar`} 
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-white font-medium">{post.user_name}</h3>
+                    <span className="text-gray-400 text-sm">•</span>
+                    <span className="text-gray-400 text-sm">{post.timestamp}</span>
+                  </div>
+                  <p className="text-gray-300 mt-2 leading-relaxed">{post.text}</p>
+                  
+                  {/* Post Actions */}
+                  <div className="flex items-center space-x-6 mt-4">
+                    <button
+                      onClick={() => toggleLike(post.id)}
+                      className={`flex items-center space-x-2 transition-colors ${
+                        post.liked 
+                          ? 'text-red-500 hover:text-red-400' 
+                          : 'text-gray-400 hover:text-red-500'
+                      }`}
+                    >
+                      <Heart 
+                        size={18} 
+                        className={post.liked ? 'fill-current' : ''} 
+                      />
+                      <span className="text-sm">{post.likes}</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => toggleComments(post.id)}
+                      className="flex items-center space-x-2 text-gray-400 hover:text-green-500 transition-colors"
+                    >
+                      <MessageCircle size={18} />
+                      <span className="text-sm">{post.comments.length}</span>
+                    </button>
+                  </div>
+
+                  {/* Comments Section */}
+                  {showComments[post.id] && (
+                    <div className="mt-4 space-y-3">
+                      {/* Existing Comments */}
+                      {post.comments.map((comment) => (
+                        <div key={comment.id} className="flex items-start space-x-3 ml-4">
+                          <img 
+                            src= {`http://127.0.0.1:8000${comment.user_image}`}
+                            alt={`${comment.user_name}'s avatar`} 
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                          <div className="flex-1 bg-gray-700 rounded-lg p-3">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-white text-sm font-medium">{comment.user_name}</span>
+                              <span className="text-gray-400 text-xs">•</span>
+                              <span className="text-gray-400 text-xs">{comment.timestamp}</span>
+                            </div>
+                            <p className="text-gray-300 text-sm mt-1">{comment.text}</p>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Add Comment */}
+                      <div className="ml-4">
+                        <div className="flex items-start space-x-3">
+                          <img 
+                            src={`http://127.0.0.1:8000${user.user_image}`}
+                            alt="Your avatar" 
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={newComment[post.id] || ''}
+                              onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleCommentSubmit(post.id);
+                                }
+                              }}
+                              placeholder="Write a comment..."
+                              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-400"
+                            />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        );
+        </div>
+      );
+
       case 'playlists':
         return (
           <div className="space-y-6">
