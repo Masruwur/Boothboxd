@@ -88,6 +88,15 @@ CREATE TABLE text_content (
   text CLOB
 );
 
+CREATE TABLE notifications (
+    notification_id NUMBER PRIMARY KEY,
+    recipient_id NUMBER NOT NULL,     
+    sender_id NUMBER NOT NULL,        
+    message VARCHAR2(500),
+    created_at DATE DEFAULT SYSDATE
+);
+
+
 
 -- posts
 ALTER TABLE posts ADD FOREIGN KEY (user_id) REFERENCES users (user_id);
@@ -148,4 +157,6 @@ CREATE SEQUENCE comment_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE rating_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE playlist_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE content_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE notification_seq START WITH 1 INCREMENT BY 1;
+
 

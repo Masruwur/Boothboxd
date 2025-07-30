@@ -18,7 +18,9 @@ import {
   Play ,
   Heart,
   MessageCircle,
-  Send
+  Send,
+  Bell,
+  Clock
 } from 'lucide-react';
 
 export default function Home() {
@@ -48,6 +50,7 @@ export default function Home() {
   const [popData,setpopData] = useState(null)
   const [userAlbums, setUserAlbums] = useState([]);
   const [rposts,setRposts] = useState([])
+  const [notifications, setNotifications] = useState([]);
 
 
   const navigationItems = [
@@ -57,6 +60,7 @@ export default function Home() {
     { name: 'Marketplace', key: 'marketplace', icon: ShoppingBag },
     { name: 'Cards', key: 'cards', icon: CreditCard }, 
     { name: 'My Albums', key: 'my albums', icon: Music },
+    { name: 'Notifications', key: 'notifications', icon: Bell },
   ];
 
 
@@ -167,6 +171,44 @@ useEffect(()=>{
    }
    fetchposts();
 },[activeSection])
+
+useEffect(() => {
+    const fetchNotifications = async () => {
+        if (activeSection !== 'notifications') return;
+        
+        try {
+            const token = localStorage.getItem(ACCESS_TOKEN);
+            const user_id = jwtDecode(token).user_id;
+            
+            const res = await api.post('notifications/', {
+                recipient_id: user_id
+            });
+            
+            setNotifications(res.data.notifications);
+        } catch (err) {
+            console.error("Failed to fetch notifications:", err);
+        }
+    };
+
+    fetchNotifications();
+}, [activeSection]);
+
+const formatNotificationTime = (timestamp) => {
+    const now = new Date();
+    const notificationTime = new Date(timestamp);
+    const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+    
+    return notificationTime.toLocaleDateString();
+};
 
 
   const handlePlaylistClick = (playlist_name) =>{
@@ -649,6 +691,76 @@ useEffect(()=>{
               /> )}
             </div>
           );
+      
+     case 'notifications':
+  return (
+    <div className="space-y-6">
+      <h2 className="text-3xl font-bold text-white">Notifications</h2>
+      
+      <div className="space-y-4">
+        {notifications.length === 0 ? (
+          <div className="bg-gray-800 rounded-lg p-8 text-center">
+            <Bell size={48} className="text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-400 text-lg">No notifications yet</p>
+            <p className="text-gray-500 text-sm mt-2">When someone interacts with your content, you'll see it here</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map((notification) => (
+              <div 
+                key={notification.notification_id} 
+                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors border border-gray-700 cursor-pointer"
+                onClick={() => notification.sender_id && handleUserClick(notification.sender_id)}
+              >
+                <div className="flex items-start space-x-3">
+                  {/* Sender's profile image */}
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                    {notification.user_image ? (
+                      <img 
+                        src={`http://127.0.0.1:8000${notification.user_image}`}
+                        alt={`${notification.user_name}'s avatar`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-blue-600 flex items-center justify-center">
+                        <Bell size={18} className="text-white" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        {/* Show sender name if available */}
+                        {notification.user_name && (
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="text-green-400 font-medium text-sm">
+                              {notification.user_name}
+                            </span>
+                          </div>
+                        )}
+                        
+                        <p className="text-white text-sm leading-relaxed">
+                          {notification.message}
+                        </p>
+                        
+                        <div className="flex items-center space-x-2 mt-2">
+                          <Clock size={12} className="text-gray-400" />
+                          <span className="text-gray-400 text-xs">
+                            {formatNotificationTime(notification.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
       // ADD THIS NEW CASE FOR CARDS
       case 'cards':

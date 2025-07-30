@@ -1467,22 +1467,31 @@ def get_posts(request,user_id):
             tc.text,
             (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.post_id) AS like_count,
             CASE 
-            WHEN EXISTS (
-                SELECT 1 FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :user_id
-            ) THEN 1
-            ELSE 0
+                WHEN EXISTS (
+                    SELECT 1 FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :user_id
+                ) THEN 1
+                ELSE 0
             END AS liked,
-            p.created_at
+            p.created_at,
+            f.follower_id
         FROM posts p
         JOIN users u ON p.user_id = u.user_id
         JOIN text_content tc ON p.content_id = tc.content_id
-        ORDER BY p.created_at DESC
-    """,{'user_id':user_id})
+        LEFT JOIN following f 
+            ON f.followee_id = u.user_id AND f.follower_id = :user_id
+        ORDER BY 
+            CASE 
+                WHEN f.follower_id IS NOT NULL THEN 0
+                ELSE 1
+            END,
+            p.created_at DESC
+    """, {'user_id': user_id})
+
     post_rows = cursor.fetchall()
 
     posts = []
     for row in post_rows:
-        post_id, user_id, user_name, user_image, text, like_count, liked, created_at = row
+        post_id, user_id, user_name, user_image, text, like_count, liked, created_at,_ = row
         text = readLOB(text)
         
         # Fetch comments for this post
@@ -1744,6 +1753,84 @@ def follow_user(request):
         if connection:
             connection.rollback()
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def get_notifications(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        recipient_id = body.get('recipient_id')
+
+        if not recipient_id:
+            return JsonResponse({'error': 'Missing recipient_id'}, status=400)
+
+        connection, cursor = connect()
+
+        # Fetch notifications for the recipient
+        cursor.execute("""
+            SELECT notification_id, sender_id, message, created_at,
+            (select user_name from users where user_id = sender_id),
+            (select user_image from users where user_id = sender_id)
+            FROM notifications
+            WHERE recipient_id = :recipient_id
+            ORDER BY created_at DESC
+        """, {'recipient_id': recipient_id})
+
+        rows = cursor.fetchall()
+
+        notifications = [
+            {
+                'notification_id': row[0],
+                'sender_id': row[1],
+                'message': row[2],
+                'created_at': row[3].strftime('%Y-%m-%d %H:%M:%S') if row[3] else None,
+                'user_name' : row[4],
+                'user_image' : row[5]
+            }
+            for row in rows
+        ]
+
+        return JsonResponse({'notifications': notifications}, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+
+@csrf_exempt
+def is_following(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        follower_id = body.get('follower_id')
+        following_id = body.get('following_id')
+
+        if not follower_id or not following_id:
+            return JsonResponse({'error': 'Missing follower_id or following_id'}, status=400)
+
+        connection, cursor = connect()
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM following
+            WHERE follower_id = :follower_id AND followee_id = :following_id
+        """, {
+            'follower_id': follower_id,
+            'following_id': following_id
+        })
+
+        count = cursor.fetchone()[0]
+        is_following = count > 0
+
+        return JsonResponse({'is_following': is_following}, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 
 
 

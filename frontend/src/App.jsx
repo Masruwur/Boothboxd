@@ -10,7 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import PlaylistPage from './pages/Playlist'
 import BoothboxdAdmin from './pages/Admin'
 import AdminRoute from './components/AdminRoute'
-import UserProfile from './pages/proflie'
+import UserProfile from './pages/profile'
 
 function Logout(){
   localStorage.clear()

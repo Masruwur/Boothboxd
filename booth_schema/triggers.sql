@@ -60,3 +60,25 @@ END;
 /
 
 --blocking users
+
+CREATE OR REPLACE TRIGGER trg_follow_notification
+AFTER INSERT ON following
+FOR EACH ROW
+BEGIN
+    INSERT INTO notifications (
+        notification_id,
+        recipient_id,
+        sender_id,
+        message,
+        created_at
+    ) VALUES (
+        notification_seq.NEXTVAL,
+        :NEW.followee_id,
+        :NEW.follower_id,
+        'You have a new follower!',
+        SYSDATE
+    );
+END;
+/
+
+-- follow notif

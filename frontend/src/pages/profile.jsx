@@ -13,6 +13,31 @@ const UserProfile = ({ status }) => {
   const [ruser, setUser] = useState({});
   const [reviews, setReviews] = useState([]);
   const [albums, setAlbums] = useState([]);
+  const [isFollowing, setIsFollowing] = useState(false);
+
+  const fetchStatus = async ()=>{
+    const token = localStorage.getItem(ACCESS_TOKEN);
+     const follower_id = jwtDecode(token).user_id;
+     const followee_id = params.id;
+
+    try{
+      const res = await api.post('following/',{
+        follower_id: follower_id,
+        following_id: followee_id
+      })
+
+      console.log(res.data)
+      setIsFollowing(res.data?.is_following)
+      
+    }catch(err){
+      console.log(err)
+    }
+  };
+
+  useEffect(()=>{
+    fetchStatus();
+  },[])
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,6 +67,8 @@ const UserProfile = ({ status }) => {
       const token = localStorage.getItem(ACCESS_TOKEN);
       const follower_id = jwtDecode(token).user_id;
       const followee_id = params.id;
+
+      setIsFollowing(true)
 
       try{
         const res = await api.post('/follow/',{
@@ -116,7 +143,7 @@ const UserProfile = ({ status }) => {
               </div>
             </div>
             <button onClick={()=>{handleFollow()}} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-              Follow
+              {isFollowing? 'Following':'Follow'}
             </button>
           </div>
         </div>
