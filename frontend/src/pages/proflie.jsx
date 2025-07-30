@@ -4,33 +4,67 @@ import { useEffect,useState } from 'react';
 import api from '../api';
 import { ACCESS_TOKEN } from '../constants';
 import { jwtDecode } from 'jwt-decode';
+import { useParams } from 'react-router-dom';
 
 
 
-const UserProfile = () => {
+const UserProfile = ({ status }) => {
+  const params = useParams(); // ✅ call useParams here at the top
+  const [ruser, setUser] = useState({});
+  const [reviews, setReviews] = useState([]);
+  const [albums, setAlbums] = useState([]);
 
-  const [ruser,setUser] = useState({})
-  const [reviews,setReviews] = useState([])
-  const [albums,setAlbums] = useState([])
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem(ACCESS_TOKEN);
+        let user_id = 0;
 
-  useEffect(()=>{
-        const fetchData = async () =>{
-            try{
-                 const token = localStorage.getItem(ACCESS_TOKEN);
-                 const user_id = jwtDecode(token).user_id;
-
-                 const res = await api.get(`profile/${user_id}/`)
-                 setUser(res.data?.user_info)
-                 setReviews(res.data?.ratings)
-                 setAlbums(res.data?.recent_albums)
-            }catch(err){
-                console.log(err)
-            }
+        if (status === 'main') {
+          user_id = jwtDecode(token).user_id;
+        } else {
+          user_id = params.id;  // ✅ now it's safe to use
         }
-       
-        fetchData();
 
-  },[])
+        const res = await api.get(`profile/${user_id}/`);
+        setUser(res.data?.user_info);
+        setReviews(res.data?.ratings);
+        setAlbums(res.data?.recent_albums);
+      } catch (err) {
+        console.log(err);
+      }
+    };
+
+    fetchData();
+  }, [status, params.id]);
+
+  const handleFollow = async ()=>{
+      const token = localStorage.getItem(ACCESS_TOKEN);
+      const follower_id = jwtDecode(token).user_id;
+      const followee_id = params.id;
+
+      try{
+        const res = await api.post('/follow/',{
+          follower_id: follower_id,
+          followee_id: followee_id
+        })
+
+        if(res.status===200){
+          alert('already following')
+        }
+        if(res.status===201){
+          alert('followed')
+        }
+      }catch(err){
+        if(err.response){
+          if(err.response.status===400){
+            alert('cannot follow yourself')
+          }
+
+        }
+      }
+
+  }
   
   const StarRating = ({ stars }) => {
     return (
@@ -81,7 +115,7 @@ const UserProfile = () => {
                 <p className="text-gray-300 text-lg">{ruser.user_title}</p>
               </div>
             </div>
-            <button className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+            <button onClick={()=>{handleFollow()}} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
               Follow
             </button>
           </div>

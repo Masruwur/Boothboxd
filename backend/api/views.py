@@ -1461,6 +1461,7 @@ def get_posts(request,user_id):
     cursor.execute("""
         SELECT 
             p.post_id,
+            u.user_id,
             u.user_name,
             u.user_image,
             tc.text,
@@ -1481,7 +1482,7 @@ def get_posts(request,user_id):
 
     posts = []
     for row in post_rows:
-        post_id, user_name, user_image, text, like_count, liked, created_at = row
+        post_id, user_id, user_name, user_image, text, like_count, liked, created_at = row
         text = readLOB(text)
         
         # Fetch comments for this post
@@ -1514,6 +1515,7 @@ def get_posts(request,user_id):
 
         posts.append({
             "id": post_id,
+            'user_id' : user_id,
             "user_name": user_name,
             "user_image": user_image,
             "text": text,
@@ -1690,6 +1692,53 @@ def remove_like(request):
 
         connection.commit()
         return JsonResponse({'message': 'Like removed'}, status=200)
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+
+@csrf_exempt
+def follow_user(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        follower_id = data.get('follower_id')
+        followee_id = data.get('followee_id')
+
+        if not follower_id or not followee_id:
+            return JsonResponse({'error': 'Missing follower_id or followee_id'}, status=400)
+
+        if follower_id == followee_id:
+            return JsonResponse({'error': 'Cannot follow yourself'}, status=400)
+
+        connection, cursor = connect()
+
+        # Check if already following
+        cursor.execute("""
+            SELECT COUNT(*) FROM following
+            WHERE follower_id = :follower_id AND followee_id = :followee_id
+        """, {'follower_id': follower_id, 'followee_id': followee_id})
+        
+        if cursor.fetchone()[0] > 0:
+            return JsonResponse({'message': 'Already following'}, status=200)
+
+        # Insert into following
+        cursor.execute("""
+            INSERT INTO following (follower_id, followee_id, followd_at)
+            VALUES (:follower_id, :followee_id, :followd_at)
+        """, {
+            'follower_id': follower_id,
+            'followee_id': followee_id,
+            'followd_at': datetime.now()
+        })
+
+        connection.commit()
+        return JsonResponse({'message': 'Followed successfully'}, status=201)
 
     except Exception as e:
         if connection:

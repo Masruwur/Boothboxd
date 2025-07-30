@@ -32,7 +32,7 @@ function App() {
         <Route path="/login" element={<LoginPage/>}/>
         <Route path="/user" element={
           <ProtectedRoute>
-          <UserProfile/>
+          <UserProfile status={'main'}/>
           </ProtectedRoute>}/>
         <Route path="/home" element={
           <ProtectedRoute>
@@ -52,6 +52,10 @@ function App() {
           <AdminRoute>
           <BoothboxdAdmin/>
           </AdminRoute>} />
+           <Route path="/profile/:id" element={
+          <ProtectedRoute>
+          <UserProfile  status={'sec'}/>
+          </ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   )

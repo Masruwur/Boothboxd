@@ -374,6 +374,12 @@ useEffect(()=>{
     }
   };
 
+  const handleUserClick = (user_id) =>{
+   navigate(`/profile/${user_id}`)
+   console.log(user_id)
+
+  }
+
 
   const renderContent = () => {
     switch (activeSection) {
@@ -490,7 +496,7 @@ useEffect(()=>{
                 />
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">
-                    <h3 className="text-white font-medium">{post.user_name}</h3>
+                    <h3 onClick={() => handleUserClick(post.user_id)} className="text-white font-medium cursor-pointer">{post.user_name}</h3>
                     <span className="text-gray-400 text-sm">•</span>
                     <span className="text-gray-400 text-sm">{post.timestamp}</span>
                   </div>
