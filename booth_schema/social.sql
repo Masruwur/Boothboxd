@@ -14,13 +14,7 @@ CREATE TABLE posts (
   created_at DATE
 );
 
-CREATE TABLE post_music (
-  post_id NUMBER,
-  music_id NUMBER,
-  music_type CHAR(1),
-  created_at DATE,
-  PRIMARY KEY (post_id, music_id)
-);
+
 
 CREATE TABLE comments (
   comment_id NUMBER PRIMARY KEY,
@@ -32,13 +26,11 @@ CREATE TABLE comments (
   like_count NUMBER
 );
 
-CREATE TABLE vote (
-  content_id NUMBER,
+CREATE TABLE likes (
+  post_id NUMBER,
   user_id NUMBER,
-  type CHAR(1),
-  content_type CHAR(1),
   created_at DATE,
-  PRIMARY KEY (content_id, user_id)
+  PRIMARY KEY (post_id, user_id)
 );
 
 CREATE TABLE visited (

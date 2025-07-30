@@ -15,7 +15,10 @@ import {
   User,
   CreditCard,
   Music,
-  Play 
+  Play ,
+  Heart,
+  MessageCircle,
+  Send
 } from 'lucide-react';
 
 export default function Home() {
@@ -224,6 +227,12 @@ useEffect(() => {
       console.error('Failed to register card:', error);
     }
   };
+
+   const handleImageClick = () => {
+    navigate('/user'); 
+  };
+
+  
 
 
   const renderContent = () => {
@@ -599,7 +608,7 @@ useEffect(() => {
           <div className="px-4 py-6 border-b border-gray-700 mt-0 flex-shrink-0">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
-                  <img
+                  <img  onClick={handleImageClick} 
                         src={`http://127.0.0.1:8000${user.user_image}`}
                         className="w-full h-full object-cover"
                     />

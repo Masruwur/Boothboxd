@@ -10,6 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import PlaylistPage from './pages/Playlist'
 import BoothboxdAdmin from './pages/Admin'
 import AdminRoute from './components/AdminRoute'
+import UserProfile from './pages/proflie'
 
 function Logout(){
   localStorage.clear()
@@ -29,6 +30,10 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage/>}/>
+        <Route path="/user" element={
+          <ProtectedRoute>
+          <UserProfile/>
+          </ProtectedRoute>}/>
         <Route path="/home" element={
           <ProtectedRoute>
           <Home/>

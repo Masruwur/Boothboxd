@@ -49,6 +49,14 @@ CREATE TABLE platform_fee (
   PRIMARY KEY ("from", "to")
 );
 
+CREATE TABLE card_creds(
+  method_type VARCHAR2(255),
+  last4 CHAR(4),
+  expiry CHAR(5),
+  passkey CHAR(4),
+  PRIMARY KEY (method_type,last4,expiry)
+);
+
 
 
 ALTER TABLE card_info

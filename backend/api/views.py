@@ -1357,6 +1357,80 @@ def marketstats(request):
     finally:
         disconnect(cursor, connection)
 
+@csrf_exempt
+def user_summary(request, user_id):
+    if request.method != 'GET':
+        return HttpResponseBadRequest('Only GET method allowed.')
+
+    try:
+        connection,cursor = connect()
+        # 1. User info
+        cursor.execute("""
+            SELECT user_name, user_title, user_image
+            FROM users
+            WHERE user_id = :user_id
+        """, {'user_id': user_id})
+
+        row = cursor.fetchone()
+        user_info = dict(zip(['user_name', 'user_title', 'user_image'], row)) if row else {}
+
+        # 2. Ratings with content and album info
+        cursor.execute("""
+            SELECT stars,
+                (SELECT text FROM text_content WHERE content_id = r.content_id) AS content,
+                (SELECT album_name FROM albums WHERE album_id = r.music_id) AS album_name,
+                (SELECT album_image FROM albums WHERE album_id = r.music_id) AS album_image
+            FROM ratings r
+            WHERE user_id = :user_id
+            ORDER BY created_at DESC
+            FETCH FIRST 4 ROWS ONLY
+        """, {'user_id': user_id})
+
+        ratings = [
+            {
+                'stars' : row[0],
+                'text' : readLOB(row[1]),
+                'album_name' : row[2],
+                'album_image' : row[3]
+            }
+            for row in cursor.fetchall()
+        ]
+
+        # 3. Recently purchased or subscribed albums
+        cursor.execute("""
+            SELECT album_name, album_image FROM (
+                (SELECT A.album_name, A.album_image, P.created_at
+                    FROM purchases P
+                    JOIN albums A ON A.album_id = P.album_id
+                    WHERE P.user_id = :user_id)
+                UNION
+                (SELECT A.album_name, A.album_image, S.created_at
+                    FROM subscription S
+                    JOIN albums A ON A.album_id = S.album_id
+                    WHERE S.user_id = :user_id)
+            )
+            ORDER BY created_at DESC
+            FETCH FIRST 4 ROWS ONLY
+        """, {'user_id': user_id})
+
+        recent_albums = [
+            dict(zip(['album_name', 'album_image'], row))
+            for row in cursor.fetchall()
+        ]
+
+        return JsonResponse({
+            'user_info': user_info,
+            'ratings': ratings,
+            'recent_albums': recent_albums
+        })
+
+    except Exception as e:
+        print('Error:', e)
+        return JsonResponse({'error': 'Internal server error'}, status=500)
+    finally:
+        disconnect(cursor,connection)
+
+
 
 
 
