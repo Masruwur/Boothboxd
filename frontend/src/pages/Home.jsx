@@ -1,4 +1,4 @@
-import React, { useState,useEffect } from 'react';
+import React, { useState,useEffect,useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { ACCESS_TOKEN } from '../constants';
@@ -20,7 +20,8 @@ import {
   MessageCircle,
   Send,
   Bell,
-  Clock
+  Clock,
+  Search
 } from 'lucide-react';
 
 export default function Home() {
@@ -64,6 +65,41 @@ export default function Home() {
   ];
 
   const [recom,setRecom] = useState([])
+
+  const [albumSearch, setAlbumSearch] = useState('');
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [showAlbumDropdown, setShowAlbumDropdown] = useState(false);
+
+  // Filter albums based on search
+const filteredAlbums = useMemo(() => {
+  if (!albumSearch.trim()) return [];
+  
+  return albumList?.filter(album => 
+    album.album_name.toLowerCase().includes(albumSearch.toLowerCase()) ||
+    album.album_artist.toLowerCase().includes(albumSearch.toLowerCase())
+  ) || [];
+}, [albumSearch, albumList]);
+
+// Handle album selection
+const handleAlbumSelect = (album) => {
+  setSelectedAlbum(album);
+  setAlbumSearch('');
+  setShowAlbumDropdown(false);
+};
+
+// Close dropdown when clicking outside
+useEffect(() => {
+  const handleClickOutside = (event) => {
+    if (!event.target.closest('.album-search-container')) {
+      setShowAlbumDropdown(false);
+    }
+  };
+
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, []);
+
+
 
   useEffect(()=>{
     const fetchRecom = async ()=>{
@@ -324,7 +360,8 @@ const formatNotificationTime = (timestamp) => {
 
       const data = {
         user_id: user_id,
-        text: newPost
+        text: newPost,
+        album_name: selectedAlbum? selectedAlbum.album_name : null
       }
 
       await api.post('posts/create/',data)
@@ -343,6 +380,10 @@ const formatNotificationTime = (timestamp) => {
       fetchposts();
 
     }
+
+    setNewPost('');
+    setSelectedAlbum(null);
+    setAlbumSearch('');
   };
 
  const toggleLike = async (postId) => {
@@ -589,15 +630,95 @@ const formatNotificationTime = (timestamp) => {
       <div className="max-w-2xl mx-auto space-y-6 p-4">
         <h2 className="text-3xl font-bold text-white">Posts</h2>
         
-        {/* New Post Input */}
+      {/* New Post Input */}
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <div className="flex items-start space-x-3">
-            <img 
-              src={`http://127.0.0.1:8000${user.user_image}`} 
-              alt="Your avatar" 
+            <img
+              src={`http://127.0.0.1:8000${user.user_image}`}
+              alt="Your avatar"
               className="w-10 h-10 rounded-full object-cover"
             />
             <div className="flex-1">
+              {/* Selected Album Display */}
+              {selectedAlbum && (
+                <div className="mb-3 bg-gray-700 rounded-lg p-3 border border-gray-600">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <img
+                        src={selectedAlbum.album_image}
+                        alt={selectedAlbum.album_name}
+                        className="w-8 h-8 rounded object-cover"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-white">{selectedAlbum.album_name}</p>
+                        <p className="text-xs text-gray-400">{selectedAlbum.album_artist} • {selectedAlbum.year}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAlbum(null)}
+                      className="text-gray-400 hover:text-white p-1"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Album Search */}
+              <div className="mb-3 relative album-search-container">
+                <div className="flex items-center space-x-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      value={albumSearch}
+                      onChange={(e) => setAlbumSearch(e.target.value)}
+                      onFocus={() => setShowAlbumDropdown(true)}
+                      placeholder="Search for an album to reference..."
+                      className="w-full bg-gray-700 text-white rounded-lg pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-400"
+                    />
+                  </div>
+                  {albumSearch && (
+                    <button
+                      onClick={() => {
+                        setAlbumSearch('');
+                        setShowAlbumDropdown(false);
+                      }}
+                      className="text-gray-400 hover:text-white p-2"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Album Dropdown */}
+                {showAlbumDropdown && albumSearch && filteredAlbums.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                    {filteredAlbums.slice(0, 8).map((album, index) => (
+                      <div
+                        key={index}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleAlbumSelect(album);
+                        }}
+                        className="w-full flex items-center space-x-3 p-3 hover:bg-gray-600 transition-colors cursor-pointer"
+                      >
+                        <img
+                          src={album.album_image}
+                          alt={album.album_name}
+                          className="w-10 h-10 rounded object-cover"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{album.album_name}</p>
+                          <p className="text-xs text-gray-400 truncate">{album.album_artist} • {album.year}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Post Textarea */}
               <textarea
                 value={newPost}
                 onChange={(e) => setNewPost(e.target.value)}
@@ -610,7 +731,12 @@ const formatNotificationTime = (timestamp) => {
                 className="w-full bg-gray-700 text-white rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-400"
                 rows="3"
               />
-              <div className="flex justify-end mt-3">
+
+              {/* Post Actions */}
+              <div className="flex justify-between items-center mt-3">
+                <div className="text-xs text-gray-400">
+                  {selectedAlbum ? `Referencing: ${selectedAlbum.album_name}` : 'Ctrl+Enter to post'}
+                </div>
                 <button
                   onClick={handlePostSubmit}
                   disabled={!newPost.trim()}
@@ -624,107 +750,134 @@ const formatNotificationTime = (timestamp) => {
           </div>
         </div>
 
-        {/* Posts Feed */}
-        <div className="space-y-4">
-          {rposts.map((post) => (
-            <div key={post.id} className="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors border border-gray-700">
-              <div className="flex items-start space-x-3">
-                <img 
-                  src= {`http://127.0.0.1:8000${post.user_image}`}
-                  alt={`${post.user_name}'s avatar`} 
-                  className="w-10 h-10 rounded-full object-cover"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2">
-                    <h3 onClick={() => handleUserClick(post.user_id)} className="text-white font-medium cursor-pointer">{post.user_name}</h3>
-                    <span className="text-gray-400 text-sm">•</span>
-                    <span className="text-gray-400 text-sm">{post.timestamp}</span>
-                  </div>
-                  <p className="text-gray-300 mt-2 leading-relaxed">{post.text}</p>
-                  
-                  {/* Post Actions */}
-                  <div className="flex items-center space-x-6 mt-4">
-                    <button
-                      onClick={() => toggleLike(post.id)}
-                      className={`flex items-center space-x-2 transition-colors ${
-                        post.liked 
-                          ? 'text-red-500 hover:text-red-400' 
-                          : 'text-gray-400 hover:text-red-500'
-                      }`}
-                    >
-                      <Heart 
-                        size={18} 
-                        className={post.liked ? 'fill-current' : ''} 
+       {/* Posts Feed */}
+      <div className="space-y-4">
+        {rposts.map((post) => (
+          <div key={post.id} className="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors border border-gray-700">
+            <div className="flex items-start space-x-3">
+              <img 
+                src= {`http://127.0.0.1:8000${post.user_image}`}
+                alt={`${post.user_name}'s avatar`} 
+                className="w-10 h-10 rounded-full object-cover"
+              />
+              <div className="flex-1">
+                <div className="flex items-center space-x-2">
+                  <h3 onClick={() => handleUserClick(post.user_id)} className="text-white font-medium cursor-pointer">{post.user_name}</h3>
+                  <span className="text-gray-400 text-sm">•</span>
+                  <span className="text-gray-400 text-sm">{post.timestamp}</span>
+                </div>
+
+                {/* Referenced Album Display */}
+                {post.album_name && (
+                  <div className="mt-3 bg-gray-700 rounded-lg p-3 border border-gray-600">
+                    <div className="flex items-center space-x-3">
+                      <img
+                        src={post.album_image}
+                        alt={post.album_name}
+                        className="w-12 h-12 rounded object-cover cursor-pointer"
+                        onClick={() => HandleClick(post.album_name)}
                       />
-                      <span className="text-sm">{post.likes}</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => toggleComments(post.id)}
-                      className="flex items-center space-x-2 text-gray-400 hover:text-green-500 transition-colors"
-                    >
-                      <MessageCircle size={18} />
-                      <span className="text-sm">{post.comments.length}</span>
-                    </button>
-                  </div>
-
-                  {/* Comments Section */}
-                  {showComments[post.id] && (
-                    <div className="mt-4 space-y-3">
-                      {/* Existing Comments */}
-                      {post.comments.map((comment) => (
-                        <div key={comment.id} className="flex items-start space-x-3 ml-4">
-                          <img 
-                            src= {`http://127.0.0.1:8000${comment.user_image}`}
-                            alt={`${comment.user_name}'s avatar`} 
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                          <div className="flex-1 bg-gray-700 rounded-lg p-3">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-white text-sm font-medium">{comment.user_name}</span>
-                              <span className="text-gray-400 text-xs">•</span>
-                              <span className="text-gray-400 text-xs">{comment.timestamp}</span>
-                            </div>
-                            <p className="text-gray-300 text-sm mt-1">{comment.text}</p>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Add Comment */}
-                      <div className="ml-4">
-                        <div className="flex items-start space-x-3">
-                          <img 
-                            src={`http://127.0.0.1:8000${user.user_image}`}
-                            alt="Your avatar" 
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={newComment[post.id] || ''}
-                              onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleCommentSubmit(post.id);
-                                }
-                              }}
-                              placeholder="Write a comment..."
-                              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-400"
-                            />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate cursor-pointer" 
+                          onClick={() => HandleClick(post.album_name)}>
+                          {post.album_name}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {post.album_artist} • {post.year}
+                        </p>
+                      </div>
+                      <div className="text-xs text-gray-500 bg-gray-600 px-2 py-1 rounded">
+                        Album
+                      </div>
                     </div>
                   </div>
+                )}
+
+                <p className="text-gray-300 mt-2 leading-relaxed">{post.text}</p>
+                
+                {/* Post Actions */}
+                <div className="flex items-center space-x-6 mt-4">
+                  <button
+                    onClick={() => toggleLike(post.id)}
+                    className={`flex items-center space-x-2 transition-colors ${
+                      post.liked 
+                        ? 'text-red-500 hover:text-red-400' 
+                        : 'text-gray-400 hover:text-red-500'
+                    }`}
+                  >
+                    <Heart 
+                      size={18} 
+                      className={post.liked ? 'fill-current' : ''} 
+                    />
+                    <span className="text-sm">{post.likes}</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => toggleComments(post.id)}
+                    className="flex items-center space-x-2 text-gray-400 hover:text-green-500 transition-colors"
+                  >
+                    <MessageCircle size={18} />
+                    <span className="text-sm">{post.comments.length}</span>
+                  </button>
                 </div>
-              ))}
+
+                {/* Comments Section */}
+                {showComments[post.id] && (
+                  <div className="mt-4 space-y-3">
+                    {/* Existing Comments */}
+                    {post.comments.map((comment) => (
+                      <div key={comment.id} className="flex items-start space-x-3 ml-4">
+                        <img 
+                          src= {`http://127.0.0.1:8000${comment.user_image}`}
+                          alt={`${comment.user_name}'s avatar`} 
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                        <div className="flex-1 bg-gray-700 rounded-lg p-3">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-white text-sm font-medium">{comment.user_name}</span>
+                            <span className="text-gray-400 text-xs">•</span>
+                            <span className="text-gray-400 text-xs">{comment.timestamp}</span>
+                          </div>
+                          <p className="text-gray-300 text-sm mt-1">{comment.text}</p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Add Comment */}
+                    <div className="ml-4">
+                      <div className="flex items-start space-x-3">
+                        <img 
+                          src={`http://127.0.0.1:8000${user.user_image}`}
+                          alt="Your avatar" 
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={newComment[post.id] || ''}
+                            onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleCommentSubmit(post.id);
+                              }
+                            }}
+                            placeholder="Write a comment..."
+                            className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        ))}
+      </div>
+      </div>
+      </div>
       );
-
+    
       case 'playlists':
         return (
           <div className="space-y-6">
