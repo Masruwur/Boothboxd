@@ -68,8 +68,6 @@ const UserProfile = ({ status }) => {
       const follower_id = jwtDecode(token).user_id;
       const followee_id = params.id;
 
-      setIsFollowing(true)
-
       try{
         const res = await api.post('/follow/',{
           follower_id: follower_id,
@@ -90,6 +88,8 @@ const UserProfile = ({ status }) => {
 
         }
       }
+
+      fetchStatus();
 
   }
   

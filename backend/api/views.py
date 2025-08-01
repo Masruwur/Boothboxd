@@ -557,18 +557,25 @@ class ObtainPlaylistsongs(ListAPIView):
         
 class AlbumPrices(ListAPIView):
     serializer_class = AlbumPricesSerializer
+   
 
     def get_queryset(self):
+        user_id = self.kwargs.get('user_id')
         query = """
                   SELECT distinct A.album_name,A.album_image,p1.amount buy,p2.amount rent FROM Albums A
                   JOIN Prices p1 ON (P1.ALBUM_ID = A.album_id)
                   JOIN prices p2 ON (p2.album_id = A.album_id)
                   WHERE p1.TYPE = 'PRCS' AND p2.TYPE= 'SUBS'
-                  and A.album_id != 144
+                  and A.album_id != 144 and
+                  A.album_id not in
+                  ((SELECT album_id FROM purchases WHERE user_id = :user_id)
+                    UNION
+                  (SELECT album_id FROM subscription WHERE user_id = :user_id
+                  AND "to" > SYSDATE))
                 """
         try:
             connection,cursor = connect()
-            cursor.execute(query)
+            cursor.execute(query,{'user_id':user_id})
             res = cursor.fetchall()
 
             prices = [
@@ -2009,6 +2016,29 @@ def recommend_albums(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+    
+@csrf_exempt
+def user_bought(request,user_id):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET method allowed'}, status=405)
+
+    try:
+        connection,cursor = connect()
+        query =  """SELECT album_name FROM albums WHERE album_id in
+                    ((SELECT album_id FROM purchases WHERE user_id = :user_id)
+                    UNION
+                    (SELECT album_id FROM subscription WHERE user_id = :user_id
+                    AND "to" > SYSDATE))"""
+        cursor.execute(query,{'user_id':user_id})
+
+        albums = [res[0] for res in cursor.fetchall()]
+        disconnect(cursor,connection)
+        return JsonResponse({'marketed':albums},safe=False)
+    except Exception as e:
+        print(e)
+      
+     
+
 
 
 

@@ -2,7 +2,7 @@ from django.urls import path
 from .views import SignUpView,LoginView,UniqueAlbumObtainView,AlbumSongObtainView,ArtistSongView,ArtistAlbumView,UniqueArtistObtainView,AlbumFilter,UserObtain,AlbumGenreObtain,CreatePlaylist
 from .views import GetUserPlaylists,AddPlaylistSong,ObtainPlaylistsongs,AlbumPrices,create_card,ObtainCardsView,Subscribe,Purchase,UserAlbums,ObtainFullUsers,BlockUser,UnblockUser
 from .views import QueryAlbums,RegisterAlbum,setPrice,CreateReview,get_ratings,upvote,singlestats,groupstats,marketstats,user_summary,get_posts,create_post,create_comment,create_like,remove_like,follow_user,get_notifications,is_following
-from .views import recommend_albums
+from .views import recommend_albums,user_bought
 
 urlpatterns = [
     path('signup/',view=SignUpView.as_view(),name='signup'),
@@ -19,7 +19,7 @@ urlpatterns = [
     path('playlists/users/<int:user_id>/',view=GetUserPlaylists.as_view()),
     path('playlists/add/',view=AddPlaylistSong.as_view()),
     path('playlists/<int:user_id>/<str:playlist_name>/',view=ObtainPlaylistsongs.as_view()),
-    path('prices/',view=AlbumPrices.as_view()),
+    path('prices/<int:user_id>/',view=AlbumPrices.as_view()),
     path('cards/create/',view=create_card),
     path('cards/<int:user_id>/',view=ObtainCardsView.as_view()),
     path('market/subscribe/',view=Subscribe.as_view()),
@@ -46,5 +46,6 @@ urlpatterns = [
     path('follow/',view=follow_user),
     path('notifications/',view=get_notifications),
     path('following/',view=is_following),
-    path('recommendations/',view=recommend_albums)
+    path('recommendations/',view=recommend_albums),
+    path('purchased/<int:user_id>/',view=user_bought),
 ]

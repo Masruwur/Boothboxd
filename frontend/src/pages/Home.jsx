@@ -70,6 +70,8 @@ export default function Home() {
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [showAlbumDropdown, setShowAlbumDropdown] = useState(false);
 
+  const [bought,setBought] = useState([])
+
   // Filter albums based on search
 const filteredAlbums = useMemo(() => {
   if (!albumSearch.trim()) return [];
@@ -138,6 +140,24 @@ useEffect(() => {
 }, [filters,activeSection]);
 
 useEffect(()=>{
+    const fetchBought = async ()=>{
+       const token = localStorage.getItem(ACCESS_TOKEN)
+       const user_id = jwtDecode(token).user_id
+
+       try{
+        const res = await api.get(`purchased/${user_id}/`)
+        setBought(res.data.marketed)
+          
+       }catch(err){
+        console.log(err)
+       }
+
+    }
+
+    fetchBought();
+  },[activeSection])
+
+useEffect(()=>{
     const fetchUser = async ()=>{
         try{
              const token = localStorage.getItem(ACCESS_TOKEN)
@@ -151,6 +171,8 @@ useEffect(()=>{
     };
     fetchUser();
 },[])
+
+
 
 useEffect(()=>{
     const fetchPlaylists = async ()=>{
@@ -169,7 +191,10 @@ useEffect(()=>{
 useEffect(() => {
     const fetchPrices = async () => {
         try {
-        const path = 'prices/'
+           const token = localStorage.getItem(ACCESS_TOKEN)
+           const user_id = jwtDecode(token).user_id
+
+        const path = `prices/${user_id}/`
         const res = await api.get(path)
         setPrices(res.data);
         } catch (err) {
@@ -488,51 +513,7 @@ const formatNotificationTime = (timestamp) => {
   const renderContent = () => {
     switch (activeSection) {
      case 'albums':
-        // Mock data for recommended albums
-        const recommendedAlbums = [
-          {
-            album_name: "The Dark Side of the Moon",
-            album_artist: "Pink Floyd",
-            year: 1973,
-            album_image: "https://via.placeholder.com/200x200/4338ca/ffffff?text=DSOTM"
-          },
-          {
-            album_name: "Abbey Road",
-            album_artist: "The Beatles",
-            year: 1969,
-            album_image: "https://via.placeholder.com/200x200/dc2626/ffffff?text=Abbey"
-          },
-          {
-            album_name: "Thriller",
-            album_artist: "Michael Jackson",
-            year: 1982,
-            album_image: "https://via.placeholder.com/200x200/7c3aed/ffffff?text=Thriller"
-          },
-          {
-            album_name: "Rumours",
-            album_artist: "Fleetwood Mac",
-            year: 1977,
-            album_image: "https://via.placeholder.com/200x200/059669/ffffff?text=Rumours"
-          },
-          {
-            album_name: "Back in Black",
-            album_artist: "AC/DC",
-            year: 1980,
-            album_image: "https://via.placeholder.com/200x200/1f2937/ffffff?text=BiB"
-          },
-          {
-            album_name: "Hotel California",
-            album_artist: "Eagles",
-            year: 1976,
-            album_image: "https://via.placeholder.com/200x200/b45309/ffffff?text=Hotel"
-          },
-          {
-            album_name: "Led Zeppelin IV",
-            album_artist: "Led Zeppelin",
-            year: 1971,
-            album_image: "https://via.placeholder.com/200x200/991b1b/ffffff?text=LZ4"
-          }
-        ];
+       
 
         return (
           <div className="space-y-6">
@@ -610,12 +591,17 @@ const formatNotificationTime = (timestamp) => {
               {albumList && albumList.map((album, i) => (
                 <div key={i} className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer"
                 onClick={()=>HandleClick(album.album_name)}>
-                  <div className="aspect-square bg-gray-600 rounded-md mb-3 flex items-center justify-center">
+                  <div className="relative aspect-square bg-gray-600 rounded-md mb-3 flex items-center justify-center">
                     <img
                         src={album.album_image}
                         alt={album.album_name}
                         className="w-full h-full object-cover"
                     />
+                     {bought.includes(album.album_name) && (
+                      <div className="absolute top-1 right-1 bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full">
+                        ✓ Owned
+                      </div>
+                    )}
                   </div>
                   <h3 className="text-sm font-medium text-white truncate mb-1">{album.album_name}</h3>
                   <p className="text-xs text-gray-400 truncate">{album.album_artist} • {album.year}</p>
