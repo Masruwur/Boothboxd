@@ -63,6 +63,27 @@ export default function Home() {
     { name: 'Notifications', key: 'notifications', icon: Bell },
   ];
 
+  const [recom,setRecom] = useState([])
+
+  useEffect(()=>{
+    const fetchRecom = async ()=>{
+       const token = localStorage.getItem(ACCESS_TOKEN)
+       const user_id = jwtDecode(token).user_id
+
+       try{
+        const res = await api.post('recommendations/',{'user_id':user_id})
+        const data = res.data.recommendations.slice(0,20)
+        setRecom(data)
+          
+       }catch(err){
+        console.log(err)
+       }
+
+    }
+
+    fetchRecom();
+  },[activeSection])
+
 
 useEffect(() => {
     const fetchAlbums = async () => {
@@ -425,11 +446,86 @@ const formatNotificationTime = (timestamp) => {
 
   const renderContent = () => {
     switch (activeSection) {
-      case 'albums':
+     case 'albums':
+        // Mock data for recommended albums
+        const recommendedAlbums = [
+          {
+            album_name: "The Dark Side of the Moon",
+            album_artist: "Pink Floyd",
+            year: 1973,
+            album_image: "https://via.placeholder.com/200x200/4338ca/ffffff?text=DSOTM"
+          },
+          {
+            album_name: "Abbey Road",
+            album_artist: "The Beatles",
+            year: 1969,
+            album_image: "https://via.placeholder.com/200x200/dc2626/ffffff?text=Abbey"
+          },
+          {
+            album_name: "Thriller",
+            album_artist: "Michael Jackson",
+            year: 1982,
+            album_image: "https://via.placeholder.com/200x200/7c3aed/ffffff?text=Thriller"
+          },
+          {
+            album_name: "Rumours",
+            album_artist: "Fleetwood Mac",
+            year: 1977,
+            album_image: "https://via.placeholder.com/200x200/059669/ffffff?text=Rumours"
+          },
+          {
+            album_name: "Back in Black",
+            album_artist: "AC/DC",
+            year: 1980,
+            album_image: "https://via.placeholder.com/200x200/1f2937/ffffff?text=BiB"
+          },
+          {
+            album_name: "Hotel California",
+            album_artist: "Eagles",
+            year: 1976,
+            album_image: "https://via.placeholder.com/200x200/b45309/ffffff?text=Hotel"
+          },
+          {
+            album_name: "Led Zeppelin IV",
+            album_artist: "Led Zeppelin",
+            year: 1971,
+            album_image: "https://via.placeholder.com/200x200/991b1b/ffffff?text=LZ4"
+          }
+        ];
 
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <h2 className="text-3xl font-bold text-white">Albums</h2>
+            
+            {/* Recommended Albums Row */}
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <h3 className="text-lg font-semibold text-white mb-4">Recommended for You</h3>
+              <div className="overflow-x-auto scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500" 
+                   style={{scrollbarWidth: 'thin', scrollbarColor: '#4b5563 #1f2937'}}>
+                <div className="flex space-x-4 pb-2" style={{width: 'max-content'}}>
+                  {recom.map((album) => (
+                    <div 
+                      key={album.album_id} 
+                      className="bg-gray-700 rounded-lg p-3 hover:bg-gray-600 transition-colors cursor-pointer flex-shrink-0"
+                      style={{width: '160px', height: '220px'}}
+                      onClick={() => HandleClick(album.album_name)}
+                    >
+                      <div className="w-full h-32 bg-gray-600 rounded-md mb-3 flex items-center justify-center">
+                        <img
+                          src={album.album_image}
+                          alt={album.album_name}
+                          className="w-full h-full object-cover rounded-md"
+                        />
+                      </div>
+                      <h4 className="text-sm font-medium text-white truncate mb-1">{album.album_name}</h4>
+                      <p className="text-xs text-gray-400 truncate">{album.album_artist} • {album.year}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Filters Section */}
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-white">Filters</h3>
@@ -467,6 +563,8 @@ const formatNotificationTime = (timestamp) => {
                 <input type="number" value={filters.year} onChange={(e) => setFilters({...filters, year: e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-1 focus:ring-green-500" placeholder="Year" min="1900" max="2025" />
               </div>
             </div>
+
+            {/* Albums Grid */}
             <div className="grid grid-cols-5 gap-6">
               {albumList && albumList.map((album, i) => (
                 <div key={i} className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer"

@@ -1830,6 +1830,310 @@ def is_following(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+    
+
+
+@csrf_exempt
+def recommend_albums(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        user_id = body.get('user_id')
+
+        if not user_id:
+            return JsonResponse({'error': 'Missing user_id'}, status=400)
+
+        connection, cursor = connect()
+
+        # 1. Get interacted albums: purchased + subscribed
+        cursor.execute("""
+            SELECT album_id FROM purchases WHERE user_id = :user_id
+            UNION
+            SELECT album_id FROM subscription WHERE user_id = :user_id
+        """, {'user_id': user_id})
+        interacted_album_ids = set(row[0] for row in cursor.fetchall())
+
+        # 2. Get albums from songs in playlists
+        cursor.execute("""
+            SELECT DISTINCT s.album_id
+            FROM playlists p
+            JOIN playlist_song ps ON p.pl_id = ps.pl_id
+            JOIN songs s ON ps.song_id = s.song_id
+            WHERE p.user_id = :user_id
+        """, {'user_id': user_id})
+        for row in cursor.fetchall():
+            interacted_album_ids.add(row[0])
+
+        # 3. Get reviewed album IDs
+        cursor.execute("""
+            SELECT music_id FROM ratings
+            WHERE user_id = :user_id AND music_type = 'A'
+        """, {'user_id': user_id})
+        reviewed_album_ids = set(row[0] for row in cursor.fetchall())
+        interacted_album_ids |= reviewed_album_ids
+
+        if not reviewed_album_ids:
+            return JsonResponse({'recommendations': []}, status=200)
+
+        # 4. Get genres, artists, release years from reviewed albums
+        cursor.execute("""
+            SELECT DISTINCT sg.genre_id
+            FROM songs s
+            JOIN song_genre sg ON s.song_id = sg.song_id
+            WHERE s.album_id IN :album_ids
+        """, {'album_ids': tuple(reviewed_album_ids)})
+        genre_ids = set(row[0] for row in cursor.fetchall())
+
+        cursor.execute("""
+            SELECT DISTINCT sa.artist_id
+            FROM songs s
+            JOIN song_artist sa ON s.song_id = sa.song_id
+            WHERE s.album_id IN :album_ids
+        """, {'album_ids': tuple(reviewed_album_ids)})
+        artist_ids = set(row[0] for row in cursor.fetchall())
+
+        cursor.execute("""
+            SELECT DISTINCT EXTRACT(YEAR FROM release_year) FROM albums
+            WHERE album_id IN :album_ids
+        """, {'album_ids': tuple(reviewed_album_ids)})
+        release_years = [int(row[0]) for row in cursor.fetchall() if row[0]]
+
+        # 5. Get candidate albums (genre OR artist OR similar release year)
+        candidate_album_ids = set()
+
+        if genre_ids:
+            cursor.execute("""
+                SELECT DISTINCT s.album_id
+                FROM song_genre sg
+                JOIN songs s ON sg.song_id = s.song_id
+                WHERE sg.genre_id IN :genre_ids
+            """, {'genre_ids': tuple(genre_ids)})
+            candidate_album_ids |= set(row[0] for row in cursor.fetchall())
+
+        if artist_ids:
+            cursor.execute("""
+                SELECT DISTINCT s.album_id
+                FROM song_artist sa
+                JOIN songs s ON sa.song_id = s.song_id
+                WHERE sa.artist_id IN :artist_ids
+            """, {'artist_ids': tuple(artist_ids)})
+            candidate_album_ids |= set(row[0] for row in cursor.fetchall())
+
+        if release_years:
+            year_conditions = " OR ".join([
+                f"(EXTRACT(YEAR FROM release_year) BETWEEN {yr - 2} AND {yr + 2})"
+                for yr in release_years
+            ])
+            cursor.execute(f"""
+                SELECT DISTINCT album_id FROM albums
+                WHERE {year_conditions}
+            """)
+            candidate_album_ids |= set(row[0] for row in cursor.fetchall())
+
+        # 6. Remove already interacted albums
+        recommended_album_ids = list(candidate_album_ids - interacted_album_ids)
+
+        if not recommended_album_ids:
+            return JsonResponse({'recommendations': []}, status=200)
+
+        # 7. Fetch album details
+        cursor.execute("""
+            SELECT album_id, album_name, release_year, album_image
+            FROM albums
+            WHERE album_id IN :album_ids
+        """, {'album_ids': tuple(recommended_album_ids)})
+        albums = [
+            {
+                'album_id': row[0],
+                'album_name': row[1],
+                'release_year': row[2].strftime('%Y-%m-%d') if row[2] else None,
+                'album_image': row[3]
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+        disconnect(cursor,connection)
+        return JsonResponse({'recommendations': albums}, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+def make_in_clause_params(prefix, values):
+    placeholders = ','.join([f':{prefix}{i}' for i in range(len(values))])
+    params = {f'{prefix}{i}': val for i, val in enumerate(values)}
+    return placeholders, params
+
+
+
+@csrf_exempt
+def recommend_albums(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        user_id = body.get('user_id')
+
+        if not user_id:
+            return JsonResponse({'error': 'Missing user_id'}, status=400)
+
+        connection, cursor = connect()
+
+        # 1. Albums user has interacted with
+        cursor.execute("""
+            SELECT album_id FROM purchases WHERE user_id = :user_id
+            UNION
+            SELECT album_id FROM subscription WHERE user_id = :user_id
+        """, {'user_id': user_id})
+        interacted_album_ids = set(row[0] for row in cursor.fetchall())
+
+        # 2. Albums from user-created playlists
+        cursor.execute("""
+            SELECT DISTINCT s.album_id
+            FROM playlists p
+            JOIN playlist_song ps ON p.pl_id = ps.pl_id
+            JOIN songs s ON ps.song_id = s.song_id
+            WHERE p.user_id = :user_id
+        """, {'user_id': user_id})
+        interacted_album_ids |= {row[0] for row in cursor.fetchall()}
+
+        # 3. Albums user has reviewed
+        cursor.execute("""
+            SELECT music_id FROM ratings
+            WHERE user_id = :user_id AND music_type = 'A'
+        """, {'user_id': user_id})
+        reviewed_album_ids = {row[0] for row in cursor.fetchall()}
+        interacted_album_ids |= reviewed_album_ids
+
+        if not reviewed_album_ids:
+            return JsonResponse({'recommendations': []}, status=200)
+
+        # --- Collect genre, artist, and year info for scoring ---
+        genre_ids, artist_ids, years = set(), set(), []
+
+        ph, params = make_in_clause_params('rev', list(reviewed_album_ids))
+        cursor.execute(f"""
+            SELECT DISTINCT sg.genre_id
+            FROM songs s
+            JOIN song_genre sg ON s.song_id = sg.song_id
+            WHERE s.album_id IN ({ph})
+        """, params)
+        genre_ids = {row[0] for row in cursor.fetchall()}
+
+        ph, params = make_in_clause_params('rev', list(reviewed_album_ids))
+        cursor.execute(f"""
+            SELECT DISTINCT sa.artist_id
+            FROM songs s
+            JOIN song_artist sa ON s.song_id = sa.song_id
+            WHERE s.album_id IN ({ph})
+        """, params)
+        artist_ids = {row[0] for row in cursor.fetchall()}
+
+        ph, params = make_in_clause_params('rev', list(reviewed_album_ids))
+        cursor.execute(f"""
+            SELECT DISTINCT EXTRACT(YEAR FROM release_year)
+            FROM albums
+            WHERE album_id IN ({ph})
+        """, params)
+        years = [int(row[0]) for row in cursor.fetchall() if row[0]]
+
+        # --- Ranking logic ---
+        album_score_map = {}
+
+        # Genre match (3 pts)
+        if genre_ids:
+            ph, params = make_in_clause_params('g', list(genre_ids))
+            cursor.execute(f"""
+                SELECT DISTINCT s.album_id, sg.genre_id
+                FROM song_genre sg
+                JOIN songs s ON sg.song_id = s.song_id
+                WHERE sg.genre_id IN ({ph})
+            """, params)
+            for album_id, _ in cursor.fetchall():
+                if album_id in interacted_album_ids:
+                    continue
+                album_score_map[album_id] = album_score_map.get(album_id, 0) + 3
+
+        # Artist match (4 pts)
+        if artist_ids:
+            ph, params = make_in_clause_params('a', list(artist_ids))
+            cursor.execute(f"""
+                SELECT DISTINCT s.album_id, sa.artist_id
+                FROM song_artist sa
+                JOIN songs s ON sa.song_id = s.song_id
+                WHERE sa.artist_id IN ({ph})
+            """, params)
+            for album_id, _ in cursor.fetchall():
+                if album_id in interacted_album_ids:
+                    continue
+                album_score_map[album_id] = album_score_map.get(album_id, 0) + 4
+
+        # Year proximity (2 pts)
+        if years:
+            year_conditions = " OR ".join([
+                f"(EXTRACT(YEAR FROM release_year) BETWEEN {yr - 2} AND {yr + 2})"
+                for yr in years
+            ])
+            cursor.execute(f"""
+                SELECT DISTINCT album_id
+                FROM albums
+                WHERE {year_conditions}
+            """)
+            for row in cursor.fetchall():
+                album_id = row[0]
+                if album_id in interacted_album_ids:
+                    continue
+                album_score_map[album_id] = album_score_map.get(album_id, 0) + 2
+
+        # No candidates
+        if not album_score_map:
+            return JsonResponse({'recommendations': []}, status=200)
+
+        # Sort by score descending
+        ranked_album_ids = sorted(album_score_map.items(), key=lambda x: x[1], reverse=True)
+        top_album_ids = [aid for aid, score in ranked_album_ids]
+
+        # Fetch album details
+        ph, params = make_in_clause_params('aid', top_album_ids)
+        cursor.execute(f"""
+            SELECT album_id, album_name, release_year, album_image
+            FROM albums
+            WHERE album_id IN ({ph})
+        """, params)
+
+        
+
+
+        album_data_map = {
+            row[0]: {
+                'album_id': row[0],
+                'album_name': row[1],
+                'release_year': row[2].strftime('%Y-%m-%d') if row[2] else None,
+                'album_image': row[3],
+                'album_artist' :   getAlbumArtists(cursor,row[1])[0][0]
+            
+
+            }
+            for row in cursor.fetchall()
+        }
+
+        # Preserve order based on score
+        ranked_results = [album_data_map[aid] for aid in top_album_ids if aid in album_data_map]
+
+
+        disconnect(cursor,connection)
+        return JsonResponse({'recommendations': ranked_results}, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+
+
 
 
 
